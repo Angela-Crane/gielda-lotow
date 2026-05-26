@@ -14,6 +14,12 @@ if 'konta' not in st.session_state:
 if 'oferty' not in st.session_state:
     st.session_state.oferty = []
 
+if 'propozycje' not in st.session_state:
+    st.session_state.propozycje = []
+
+if 'licznik_id_ofert' not in st.session_state:
+    st.session_state.licznik_id_ofert = 1
+
 # Inicjalizacja domyślnego indeksu dla nawigacji
 if 'nav_index' not in st.session_state:
     st.session_state.nav_index = 0
@@ -36,7 +42,7 @@ if st.session_state.user_nick is None:
             if wpisany_nick in st.session_state.konta and st.session_state.konta[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
                 st.session_state.user_imie = st.session_state.konta[wpisany_nick]["imie"]
-                st.session_state.nav_index = 0  # BEZPIECZNY RESET NAWIGACJI
+                st.session_state.nav_index = 0
                 st.rerun()
             else:
                 st.error("Nieprawidłowy nick lub hasło!")
@@ -57,7 +63,7 @@ if st.session_state.user_nick is None:
                 st.session_state.konta[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
-                st.session_state.nav_index = 0  # BEZPIECZNY RESET NAWIGACJI
+                st.session_state.nav_index = 0
                 st.success("Konto utworzone!")
                 st.rerun()
     st.stop()
@@ -75,18 +81,14 @@ if st.sidebar.button("Wyloguj się"):
     st.rerun()
 
 # Dynamiczna lista zakładek
-ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
+ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia", "📩 Otrzymane Propozycje"]
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
-# Zabezpieczenie przed wyjściem indeksu poza zakres opcji zwykłego użytkownika
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
-# Wyświetlanie menu bocznego
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI, index=st.session_state.nav_index)
-
-# Zapis aktualnej pozycji użytkownika w pamięci
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
@@ -105,9 +107,26 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
             licznik_ofert += 1
             with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
                 st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
-                st.warning(f"🔄 **Chce w zamian:** {o['w_zamian']}")
-                if st.button(f"Zaproponuj wymianę", key=f"trade_{o['kierunek']}_{o['start']}"):
-                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z: {o['imie']} (`@{o['nick']}`).")
+                st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
+                
+                # Nowy formularz składania propozycji wewnątrz rozwijanej karty
+                st.write("---")
+                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o['id']}", placeholder="Wpisz np. numer swojego lotu i datę lub 'Wolne'...")
+                
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
+                    if tekst_propozycji.strip():
+                        st.session_state.propozycje.append({
+                            "id_oferty": o["id"],
+                            "kierunek_oferty": o["kierunek"],
+                            "daty_oferty": f"{o['start']} do {o['koniec']}",
+                            "wlasciciel_nick": o["nick"],
+                            "proponujacy_nick": st.session_state.user_nick,
+                            "proponujacy_imie": st.session_state.user_imie,
+                            "co_proponuje": tekst_propozycji.strip()
+                        })
+                        st.success(f"Twój warunek wymiany został wysłany do @{o['nick']}!")
+                    else:
+                        st.error("Wpisz najpierw, co oferujesz w zamian!")
                     
     if licznik_ofert == 0:
         st.info("Brak dostępnych ofert od innych pracowników.")
@@ -128,6 +147,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
                 st.session_state.oferty.append({
+                    "id": st.session_state.licznik_id_ofert,
                     "nick": st.session_state.user_nick,
                     "imie": st.session_state.user_imie,
                     "kierunek": kierunek,
@@ -135,8 +155,8 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                # Automatyczne przekierowanie do zakładki "Moje ogłoszenia" (pozycja nr 2)
-                st.session_state.nav_index = 2
+                st.session_state.licznik_id_ofert += 1
+                st.session_state.nav_index = 2  # Przekierowanie do Moje Ogłoszenia
                 st.rerun()
             else:
                 st.error("Wypełnij wszystkie pola formularza.")
@@ -153,13 +173,37 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
         for o in moje_loty:
             st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
-            if st.button("Usuń ogłoszenie", key=f"del_{o['kierunek']}_{o['start']}", use_container_width=True):
+            if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
+                # Usuń ogłoszenie
                 st.session_state.oferty.remove(o)
+                # Usuń również powiązane z nim propozycje od innych
+                st.session_state.propozycje = [p for p in st.session_state.propozycje if p["id_oferty"] != o["id"]]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.write("---")
 
-# --- ZAKŁADKA 4: PANEL ADMINA ---
+# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE (NOWOŚĆ) ---
+elif wybrana_zakladka == "📩 Otrzymane Propozycje":
+    st.header("📩 Propozycje wymiany od załogi")
+    st.write("Tutaj trafiają oferty osób, które kliknęły 'Zaproponuj wymianę' przy Twoich lotach.")
+    
+    moje_propozycje = [p for p in st.session_state.propozycje if p["wlasciciel_nick"] == st.session_state.user_nick]
+    
+    if not moje_propozycje:
+        st.info("Nie otrzymałeś jeszcze żadnych konkretnych propozycji wymiany.")
+    else:
+        for p in moje_propozycje:
+            with st.container():
+                st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
+                st.info(f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) oferuje w zamian:\n\n**{p['co_proponuje']}**")
+                
+                if st.button("Odrzuć tę propozycję", key=f"Reject_{p['id_oferty']}_{p['proponujacy_nick']}", use_container_width=True):
+                    st.session_state.propozycje.remove(p)
+                    st.success("Propozycja została odrzucona.")
+                    st.rerun()
+                st.write("---")
+
+# --- ZAKŁADKA 5: PANEL ADMINA ---
 elif wybrana_zakladka == "🛠️ Panel Admina":
     st.header("🛠️ Panel Zarządzania Użytkownikami")
     st.write("Usuń konto pracownika, aby mógł założyć je na nowo z tym samym nickiem.")
@@ -167,13 +211,3 @@ elif wybrana_zakladka == "🛠️ Panel Admina":
     nick_do_skasowania = st.text_input("Wpisz NICK do usunięcia:").strip().upper()
     
     if st.button("🚨 Usuń użytkownika na stałe", use_container_width=True):
-        if nick_do_skasowania in st.session_state.konta:
-            if nick_do_skasowania == NICK_ADMINA:
-                st.error("Nie możesz usunąć własnego konta administratora!")
-            else:
-                del st.session_state.konta[nick_do_skasowania]
-                st.session_state.oferty = [o for o in st.session_state.oferty if o["nick"] != nick_do_skasowania]
-                st.success(f"Pomyślnie usunięto użytkownika @{nick_do_skasowania}.")
-                st.rerun()
-        else:
-            st.error("Taki użytkownik nie istnieje w bazie.")
