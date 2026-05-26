@@ -85,10 +85,19 @@ ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje o
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
+# Zabezpieczenie przed wyjściem indeksu poza zakres opcji
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
-wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI, index=st.session_state.nav_index)
+# Wyświetlanie menu bocznego z wymuszonym odświeżaniem klucza (key), co naprawia błąd kropki
+wybrana_zakladka = st.sidebar.radio(
+    "Nawigacja", 
+    ZAKLADKI, 
+    index=st.session_state.nav_index, 
+    key=f"navigation_radio_{st.session_state.nav_index}"
+)
+
+# Zapis aktualnej pozycji użytkownika, gdy klika ręcznie
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
@@ -101,7 +110,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     
     licznik_ofert = 0
     for o in st.session_state.oferty:
-        # Zabezpieczenie przed uszkodzonym rekordem tekstowym w bazie
         if not isinstance(o, dict) or "nick" not in o:
             continue
             
@@ -162,6 +170,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "w_zamian": w_zamian
                 })
                 st.session_state.licznik_id_ofert += 1
+                # Zmiana indeksu nawigacji na 2 przed przeładowaniem wymusi ruch kropki
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -209,10 +218,3 @@ elif wybrana_zakladka == "📩 Otrzymane Propozycje":
                 st.info(f"👤 **{p.get('proponujacy_imie')}** (`@{p.get('proponujacy_nick')}`) oferuje w zamian:\n\n**{p.get('co_proponuje')}**")
                 
                 if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
-                    if p in st.session_state.propozycje:
-                        st.session_state.propozycje.remove(p)
-                    st.success("Propozycja została odrzucona.")
-                    st.rerun()
-                st.write("---")
-
-# --- ZAKŁADKA 5: PANEL ADMINA ---
