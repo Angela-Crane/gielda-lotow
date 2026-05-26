@@ -1,242 +1,165 @@
 import streamlit as st
-import sqlite3
-import hashlib
 from datetime import datetime
 
-# Konfiguracja strony
+# Konfiguracja strony mobilnej
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
-# ==================== KONFIGURACJA ADMINISTRATORA ====================
+# ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-def szyfruj_haslo(haslo):
-    return hashlib.sha256(str.encode(haslo)).hexdigest()
+# ==================== CAŁKOWICIE UPROSZCZONA PAMIĘĆ ====================
+if 'konta' not in st.session_state:
+    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}}
 
-DB_FILE = "baza_lotow.db"
+if 'oferty' not in st.session_state:
+    st.session_state.oferty = []
 
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS rotacje (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pracownik_nick TEXT,
-            start_date TEXT,
-            koniec_date TEXT,
-            kierunek TEXT,
-            w_zamian TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS uzytkownicy (
-            nick TEXT PRIMARY KEY,
-            imie_nazwisko TEXT,
-            haslo_hash TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
+if 'user_nick' not in st.session_state:
+    st.session_state.user_nick = None
+if 'user_imie' not in st.session_state:
+    st.session_state.user_imie = None
 
-def weryfikuj_logowanie(nick, haslo):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    hash_do_sprawdzenia = szyfruj_haslo(haslo)
-    c.execute("SELECT imie_nazwisko FROM uzytkownicy WHERE UPPER(nick) = ? AND haslo_hash = ?", (nick.upper(), hash_do_sprawdzenia))
-    user = c.fetchone()
-    conn.close()
-    return user if user else None
-
-def sprawdz_czy_nick_zajety(nick):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT 1 FROM uzytkownicy WHERE UPPER(nick) = ?", (nick.upper(),))
-    res = c.fetchone()
-    conn.close()
-    return res is not None
-
-def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    hash_hasla = szyfruj_haslo(haslo)
-    try:
-        c.execute("INSERT INTO uzytkownicy (nick, imie_nazwisko, haslo_hash) VALUES (?, ?, ?)", 
-                  (nick.upper(), imie_nazwisko, hash_hasla))
-        conn.commit()
-        sukces = True
-    except sqlite3.IntegrityError:
-        sukces = False
-    conn.close()
-    return sukses
-
-def pobierz_wszystkie_rotacje():
-    """Pobiera rotacje bezpośrednio jako standardową listę słowników Pythona."""
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    query = '''
-        SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
-        FROM rotacje r
-        LEFT JOIN uzytkownicy u ON UPPER(r.pracownik_nick) = UPPER(u.nick)
-    '''
-    c.execute(query)
-    rekordy = c.fetchall()
-    conn.close()
-    
-    lista_rotacji = []
-    for r in rekordy:
-        lista_rotacji.append({
-            "id": r[0],
-            "pracownik_nick": r[1] if r[1] else "",
-            "imie_nazwisko": r[2] if r[2] else "Nieznany",
-            "start_date": r[3] if r[3] else "",
-            "koniec_date": r[4] if r[4] else "",
-            "kierunek": r[5] if r[5] else "",
-            "w_zamian": r[6] if r[6] else ""
-        })
-    return lista_rotacji
-
-def dodaj_rotacje_db(nick, start, koniec, kierunek, w_zamian):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO rotacje (pracownik_nick, start_date, koniec_date, kierunek, w_zamian)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (nick.upper(), start, koniec, kierunek, w_zamian))
-    conn.commit()
-    conn.close()
-
-def usun_rotacje_db(id_rotacji, nick):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM rotacje WHERE id = ? AND UPPER(pracownik_nick) = ?", (id_rotacji, nick.upper()))
-    conn.commit()
-    conn.close()
-
-def usun_uzytkownika_z_bazy(nick_do_usuniecia):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("DELETE FROM rotacje WHERE UPPER(pracownik_nick) = ?", (nick_do_usuniecia.upper(),))
-    c.execute("DELETE FROM uzytkownicy WHERE UPPER(nick) = ?", (nick_do_usuniecia.upper(),))
-    conn.commit()
-    conn.close()
-
-init_db()
-
-if 'zalogowany_nick' not in st.session_state:
-    st.session_state.zalogowany_nick = None
-if 'zalogowany_imie' not in st.session_state:
-    st.session_state.zalogowany_imie = None
-
-if st.session_state.zalogowany_nick is None:
+if st.session_state.user_nick is None:
     st.title("✈️ Giełda Rotacji Lotniczych")
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
-        wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
-        wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
+        wpisany_nick = st.text_input("Twój Nick:", key="l_nick").strip().upper()
+        wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
+        
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick and wpisane_haslo:
-                imie_uzytkownika = weryfikuj_logowanie(wpisany_nick, wpisane_haslo)
-                if imie_uzytkownika:
-                    st.session_state.zalogowany_nick = wpisany_nick
-                    st.session_state.zalogowany_imie = imie_uzytkownika
-                    st.success(f"Witaj, {imie_uzytkownika}!")
-                    st.rerun()
-                else:
-                    st.error("Nieprawidłowy nick lub hasło osobiste!")
+            if wpisany_nick in st.session_state.konta and st.session_state.konta[wpisany_nick]["haslo"] == wpisane_haslo:
+                st.session_state.user_nick = wpisany_nick
+                st.session_state.user_imie = st.session_state.konta[wpisany_nick]["imie"]
+                st.rerun()
             else:
-                st.warning("Uzupełnij oba pola logowania.")
+                st.error("Nieprawidłowy nick lub hasło!")
                 
     with zakladka_rejestracja:
-        nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="System automatycznie zamieni litery na duże.", key="reg_nick").strip().upper()
-        nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
-        nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
+        nowy_nick = st.text_input("Wymyśl swój Nick (bez spacji):", key="r_nick").strip().upper()
+        nowe_imie = st.text_input("Twoje Imię i Nazwisko:", key="r_imie").strip()
+        nowe_haslo = st.text_input("Wymyśl swoje Hasło:", type="password", key="r_pass")
+        
         if st.button("Stwórz konto", use_container_width=True):
-            if not nowy_nick or not nowe_imie or not nowe_haslo_osobiste:
-                st.error("❌ Wypełnij wszystkie pola formularza rejestracji!")
+            if not nowy_nick or not nowe_imie or not nowe_haslo:
+                st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
-                st.error("❌ Nick nie może zawierać spacji!")
-            elif sprawdz_czy_nick_zajety(nowy_nick):
-                st.error("❌ Ten nick jest już zarejestrowany w bazie!")
+                st.error("Nick nie może zawierać spacji!")
+            elif nowy_nick in st.session_state.konta:
+                st.error("Ten nick jest już zajęty!")
             else:
-                udana_rejestracja = zarejestruj_uzytkownika(nowy_nick, nowe_imie, nowe_haslo_osobiste)
-                if udana_rejestracja:
-                    st.session_state.zalogowany_nick = nowy_nick
-                    st.session_state.zalogowany_imie = nowe_imie
-                    st.success("🎉 Konto utworzone i zalogowane pomyślnie!")
-                    st.rerun()
-                else:
-                    st.error("Coś poszło nie tak. Spróbuj ponownie.")
+                st.session_state.konta[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
+                st.session_state.user_nick = nowy_nick
+                st.session_state.user_imie = nowe_imie
+                st.success("Konto utworzone!")
+                st.rerun()
     st.stop()
 
+# ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.zalogowany_imie}**")
-st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.zalogowany_nick}`")
+# Panel boczny
+st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
+st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
-    st.session_state.zalogowany_nick = None
-    st.session_state.zalogowany_imie = None
+    st.session_state.user_nick = None
+    st.session_state.user_imie = None
     st.rerun()
 
+# Lista zakładek (Panel Admina widoczny tylko dla RUTKSA17)
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
-if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
+if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
-wszystkie_rotacje = pobierz_wszystkie_rotacje()
 
-# --- ZAKŁADKA 1: FILTROWANIE ---
+# --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
-    st.subheader("Filtry wyszukiwania")
-    col1, col2 = st.columns(2)
-    with col1:
-        szukany_kierunek = st.text_input("🛫 Kierunek docelowy (np. JFK):", "").strip().upper()
-    with col2:
-        filtruj_daty = st.checkbox("📅 Filtruj po zakresie dat")
-        szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
-
-    # Bezpieczne wyciąganie ofert innych użytkowników
-    wyniki = []
-    for r in wszystkie_rotacje:
-        if r["pracownik_nick"].upper() != st.session_state.zalogowany_nick.upper():
-            # Filtrowanie po kierunku
-            if szukany_kierunek and szukany_kierunek not in r["kierunek"].upper():
+    szukany_kierunek = st.text_input("🛫 Wpisz kierunek docelowy (np. JFK):").strip().upper()
+    
+    st.write("---")
+    st.subheader("Dostępne loty innych pracowników:")
+    
+    licznik_ofert = 0
+    for o in st.session_state.oferty:
+        if o["nick"] != st.session_state.user_nick:
+            if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
-            # Filtrowanie po dacie
-            if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2:
-                od_daty = szukany_zakres[0]
-                do_daty = szukany_zakres[1]
-                r_start = datetime.strptime(r["start_date"], "%Y-%m-%d").date()
-                r_koniec = datetime.strptime(r["koniec_date"], "%Y-%m-%d").date()
-                if not (r_start <= do_daty and r_koniec >= od_daty):
-                    continue
-            wyniki.append(r)
+            licznik_ofert += 1
+            with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
+                st.write(f"👤 **Wystawiachy:** {o['imie']} (`@{o['nick']}`)")
+                st.warning(f"🔄 **Chce w zamian:** {o['w_zamian']}")
+                if st.button(f"Zaproponuj wymianę", key=f"trade_{o['kierunek']}_{o['start']}"):
+                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z: {o['imie']} (`@{o['nick']}`).")
+                    
+    if licznik_ofert == 0:
+        st.info("Brak dostępnych ofert od innych pracowników.")
 
-    st.divider()
-    st.subheader(f"Dostępne oferty ({len(wyniki)})")
-    if not wyniki:
-        st.info("Brak pasujących rotacji od innych pracowników.")
-    else:
-        for r in wyniki:
-            naglowek = f"✈️ {r['kierunek'].upper()} | 📅 {r['start_date']} do {r['koniec_date']}"
-            with st.expander(naglowek, expanded=True):
-                st.write(f"👤 **Wystawiający:** {r['imie_nazwisko']} (`@{r['pracownik_nick'].upper()}`)")
-                st.warning(f"🔄 **Warunki wymiany:** {r['w_zamian']}")
-                if st.button(f"Zaproponuj wymianę", key=f"trade_{r['id']}", use_container_width=True):
-                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {r['imie_nazwisko']} (`@{r['pracownik_nick'].upper()}`).")
-
-# --- ZAKŁADKA 2: DODAWANIE ---
+# --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
-    with st.form("form_dodaj_rotacje"):
-        nowy_kierunek = st.text_input("Kierunek docelowy (np. JFK, CDG):").strip().upper()
-        col_start, col_end = st.columns(2)
-        with col_start:
-            data_start = st.date_input("Start rotacji:", min_value=datetime.today())
-        with col_end:
-            data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
+    
+    with st.form("form_dodaj"):
+        kierunek = st.text_input("Kierunek (np. JFK, CDG):").strip().upper()
+        data_start = st.date_input("Start rotacji:", min_value=datetime.today())
+        data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
         w_zamian = st.text_area("Za co chcesz się wymienić?")
-        submit = st.form_submit_button("Zapisz w bazie danych")
+        submit = st.form_submit_button("Zapisz ogłoszenie")
+        
         if submit:
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
+            elif kierunek and w_zamian:
+                st.session_state.oferty.append({
+                    "nick": st.session_state.user_nick,
+                    "imie": st.session_state.user_imie,
+                    "kierunek": kierunek,
+                    "start": str(data_start),
+                    "koniec": str(data_koniec),
+                    "w_zamian": w_zamian
+                })
+                st.success("Rotacja została dodana!")
+                st.rerun()
+            else:
+                st.error("Wypełnij wszystkie pola formularza.")
+
+# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
+elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    
+    moje_loty = [o for o in st.session_state.oferty if o["nick"] == st.session_state.user_nick]
+    
+    if not moje_loty:
+        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
+    else:
+        for o in moje_loty:
+            st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
+            st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
+            if st.button("Usuń ogłoszenie", key=f"del_{o['kierunek']}_{o['start']}", use_container_width=True):
+                st.session_state.oferty.remove(o)
+                st.success("Ogłoszenie usunięte!")
+                st.rerun()
+            st.write("---")
+
+# --- ZAKŁADKA 4: PANEL ADMINA ---
+elif wybrana_zakladka == "🛠️ Panel Admina":
+    st.header("🛠️ Panel Zarządzania Użytkownikami")
+    st.write("Usuń konto pracownika, aby mógł założyć je na nowo z tym samym nickiem.")
+    
+    nick_do_skasowania = st.text_input("Wpisz NICK do usunięcia:").strip().upper()
+    
+    if st.button("🚨 Usuń użytkownika na stałe", use_container_width=True):
+        if nick_do_skasowania in st.session_state.konta:
+            if nick_do_skasowania == NICK_ADMINA:
+                st.error("Nie możesz usunąć własnego konta administratora!")
+            else:
+                # Usuń konto
+                del st.session_state.konta[nick_do_skasowania]
+                # Usuń jego loty z giełdy
+                st.session_state.oferty = [o for o in st.session_state.oferty if o["nick"] != nick_do_skasowania]
+                st.success(f"Pomyślnie usunięto użytkownika @{nick_do_skasowania}.")
+                st.rerun()
+        else:
+            st.error("Taki użytkownik nie istnieje w bazie.")
