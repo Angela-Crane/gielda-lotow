@@ -8,7 +8,7 @@ from datetime import datetime
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
 # ==================== KONFIGURACJA ADMINISTRATORA ====================
-NICK_ADMINA = "RUTKSA17"  # <-- Twój oficjalny nick jako Admin
+NICK_ADMINA = "RUTKSA17"
 
 def szyfruj_haslo(haslo):
     return hashlib.sha256(str.encode(haslo)).hexdigest()
@@ -118,7 +118,7 @@ if st.session_state.zalogowany_nick is None:
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
-        wpisany_nick = st.text_input("Twój Nick (małe lub duże litery):", key="login_nick").strip().upper()
+        wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
         wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
@@ -135,7 +135,7 @@ if st.session_state.zalogowany_nick is None:
                 st.warning("Uzupełnij oba pola logowania.")
                 
     with zakladka_rejestracja:
-        nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Możesz wpisać małymi literami - system sam zmieni je na DRUKOWANE", key="reg_nick").strip().upper()
+        nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Możesz wpisać małymi literami - system automatycznie zamieni je na drukowane.", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
         
@@ -238,3 +238,4 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
         st.info("Nie wystawiłeś/aś obecnie żadnych lotów na giełdę.")
     else:
         for idx, row in moje.iterrows():
+            with st.container():
