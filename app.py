@@ -68,7 +68,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -108,7 +108,6 @@ if 'zalogowany_imie' not in st.session_state:
     st.session_state.zalogowany_imie = None
 
 if st.session_state.zalogowany_nick is None:
-    # Nowy, ładniejszy wygląd panelu wejściowego
     st.markdown("""
         <div style="background-color:#1E3A8A;padding:20px;border-radius:10px;text-align:center;margin-bottom:25px">
             <h1 style="color:white;margin:0;font-size:28px;">✈️ Giełda Rotacji Lotniczych</h1>
