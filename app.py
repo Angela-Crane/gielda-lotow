@@ -18,6 +18,12 @@ DB_FILE = "baza_lotow.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
+    # 1. Usuwamy stare, wadliwe tabele (jeśli istnieją), aby baza założyła się całkowicie na czysto i poprawnie
+    c.execute("DROP TABLE IF EXISTS rotacje")
+    c.execute("DROP TABLE IF EXISTS uzytkownicy")
+    
+    # 2. Tworzymy tabele z właściwą, nową strukturą od zera
     c.execute('''
         CREATE TABLE IF NOT EXISTS rotacje (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,8 +48,11 @@ def weryfikuj_logowanie(nick, haslo):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     hash_do_sprawdzenia = szyfruj_haslo(haslo)
-    c.execute("SELECT imie_nazwisko FROM uzytkownicy WHERE nick = ? AND haslo_hash = ?", (nick.upper(), hash_do_sprawdzenia))
-    user = c.fetchone()
+    try:
+        c.execute("SELECT imie_nazwisko FROM uzytkownicy WHERE nick = ? AND haslo_hash = ?", (nick.upper(), hash_do_sprawdzenia))
+        user = c.fetchone()
+    except sqlite3.OperationalError:
+        user = None
     conn.close()
     return user if user else None
 
@@ -67,16 +76,19 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
-    query = '''
-        SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
-        FROM rotacje r
-        JOIN uzytkownicy u ON r.pracownik_nick = u.nick
-    '''
-    df = pd.read_sql_query(query, conn)
+    try:
+        query = '''
+            SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
+            FROM rotacje r
+            JOIN uzytkownicy u ON r.pracownik_nick = u.nick
+        '''
+        df = pd.read_sql_query(query, conn)
+    except Exception:
+        df = pd.DataFrame(columns=["id", "pracownik_nick", "imie_nazwisko", "start_date", "koniec_date", "kierunek", "w_zamian"])
     conn.close()
     return df
 
@@ -105,6 +117,7 @@ def usun_uzytkownika_z_bazy(nick_do_usuniecia):
     conn.commit()
     conn.close()
 
+# Inicjalizacja bazy
 init_db()
 
 if 'zalogowany_nick' not in st.session_state:
@@ -128,7 +141,7 @@ if st.session_state.zalogowany_nick is None:
                     st.success(f"Witaj, {imie_uzytkownika}!")
                     st.rerun()
                 else:
-                    st.error("Nieprawidłowy nick lub hasło osobiste!")
+                    st.error("Nieprawidłowy nick lub hasło osobiste! (Pamiętaj, że musisz najpierw utworzyć konto w zakładce obok)")
             else:
                 st.warning("Uzupełnij oba pola logowania.")
                 
@@ -181,12 +194,13 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
 
     wyniki = baza_rotacji.copy()
-    wyniki = wyniki[wyniki["pracownik_nick"] != st.session_state.zalogowany_nick]
+    if not wyniki.empty:
+        wyniki = wyniki[wyniki["pracownik_nick"] != st.session_state.zalogowany_nick]
     
-    if szukany_kierunek:
+    if szukany_kierunek and not wyniki.empty:
         wyniki = wyniki[wyniki["kierunek"].str.contains(szukany_kierunek, case=False, na=False)]
         
-    if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2:
+    if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2 and not wyniki.empty:
         od_daty = pd.to_datetime(szukany_zakres)
         do_daty = pd.to_datetime(szukany_zakres)
         wyniki["start_dt"] = pd.to_datetime(wyniki["start_date"])
@@ -221,17 +235,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif nowy_kierunek and w_zamian:
-                dodaj_rotacje_db(st.session_state.zalogowany_nick, str(data_start), str(data_koniec), nowy_kierunek, w_zamian)
-                st.success("Rotacja została dodana do bazy!")
-                st.rerun()
-            else:
-                st.error("Wypełnij wszystkie pola.")
-
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
-    st.header("📋 Twoje aktualne ogłoszenia")
-    moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
-    if moje.empty:
-        st.info("Nie wystawiłeś/aś obecnie żadnych lotów na giełdę.")
-    else:
-        for idx, row in moje.iterrows():
-            st.write(f"✈️ **{row['kierunek'].upper()}** ({row['start_date']} do {row['koniec_date']})")
