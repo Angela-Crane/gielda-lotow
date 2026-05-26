@@ -85,7 +85,6 @@ ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje o
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
-# Zabezpieczenie przed wyjściem indeksu poza zakres opcji
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
@@ -194,7 +193,7 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             if st.button("Usuń ogłoszenie", key=f"del_{o_id}", use_container_width=True):
                 if o in st.session_state.oferty:
                     st.session_state.oferty.remove(o)
-                # Zabezpieczone usuwanie z walidacją typów słownika (naprawa linii 220)
+                # Zabezpieczone filtrowanie usuwające błąd linii 193 i 220
                 st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != o_id]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
@@ -219,3 +218,4 @@ elif wybrana_zakladka == "📩 Otrzymane Propozycje":
                 
                 if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
                     if p in st.session_state.propozycje:
+                        st.session_state.propozycje.remove(p)
