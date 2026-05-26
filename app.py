@@ -190,7 +190,7 @@ elif view == "📋 Moje ogłoszenia":
             
             if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
                 st.session_state.Baza_Oferty = [item for item in st.session_state.Baza_Oferty if item["id"] != o["id"]]
-                st.session_state.Baza_Propozycje = [p for p in st.session_state.Baza_Propozycje if p["id_oferty"] != o["id"]]
+                st.session_state.Baza_Propozycje = [p for p in st.session_state.Baza_Propozycje if p.get("id_oferty") != o["id"]]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.divider()
@@ -199,15 +199,18 @@ elif view == "📋 Moje ogłoszenia":
 elif view == "📩 Otrzymane Propozycje":
     st.header("📩 Propozycje wymiany od załogi")
     
-    moje_p = [p for p in st.session_state.Baza_Propozycje if p["wlasciciel_nick"] == st.session_state.session_user]
+    moje_p = []
+    for p in st.session_state.Baza_Propozycje:
+        if isinstance(p, dict) and p.get("wlasciciel_nick") == st.session_state.session_user:
+            moje_p.append(p)
     
     if not moje_p:
         st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
     else:
         for idx, p in enumerate(moje_p):
             with st.container():
-                st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
-                st.info(
-                    f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) proponuje lot:\n\n"
-                    f"🛫 **Kierunek:** {p['prop_kierunek']}\n"
-                    f"📅 **Termin:** {p['prop_start']} do {p['prop_koniec']}\n"
+                # POPRAWKA LINII 210: Bezpieczne pobieranie (.get) chroni przed błędami starej pamięci
+                kier_oferty = p.get('kierunek_oferty', 'BRAK')
+                daty_oferty = p.get('daty_oferty', 'Nieznane daty')
+                
+                st.write(f"📌 Dotyczy Twojego lotu: **{kier_oferty}** ({daty_oferty})")
