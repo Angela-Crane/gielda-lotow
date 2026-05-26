@@ -18,7 +18,6 @@ DB_FILE = "baza_lotow.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # USUNIĘTO DROP TABLE - tabele tworzą się TYLKO jeśli nie istnieją. Dane są bezpieczne.
     c.execute('''
         CREATE TABLE IF NOT EXISTS rotacje (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +70,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -236,3 +235,4 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.error("Wypełnij wszystkie pola.")
 
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
