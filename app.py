@@ -190,14 +190,14 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             o_id = o.get("id", f"{o.get('kierunek')}_{o.get('start')}")
             st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
             st.write(f"🔄 Oczekiwania: {o.get('w_zamian']}")
+            
+            # Bezpieczne przepisywanie listy zamiast .remove() (całkowicie naprawia linię 192 i 193)
             if st.button("Usuń ogłoszenie", key=f"del_{o_id}", use_container_width=True):
-                if o in st.session_state.oferty:
-                    st.session_state.oferty.remove(o)
-                # Zabezpieczone filtrowanie usuwające błąd linii 193 i 220
+                st.session_state.oferty = [item for item in st.session_state.oferty if isinstance(item, dict) and item.get("id") != o.get("id")]
                 st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != o_id]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
-            st.write("---")
+            st.divider()
 
 # --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
 elif wybrana_zakladka == "📩 Otrzymane Propozycje":
@@ -217,5 +217,3 @@ elif wybrana_zakladka == "📩 Otrzymane Propozycje":
                 st.info(f"👤 **{p.get('proponujacy_imie')}** (`@{p.get('proponujacy_nick')}`) oferuje w zamian:\n\n**{p.get('co_proponuje')}**")
                 
                 if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
-                    if p in st.session_state.propozycje:
-                        st.session_state.propozycje.remove(p)
