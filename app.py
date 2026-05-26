@@ -8,7 +8,8 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-DB_FILE = "gielda_nowa.db"
+# Zmiana nazwy pliku na czystą wersję, aby zresetować uszkodzone rekordy testowe
+DB_FILE = "gielda_final.db"
 
 # ==================== INICJALIZACJA STAŁEJ BAZY DANYCH ====================
 def init_db():
@@ -82,7 +83,7 @@ if st.session_state.user_nick is None:
             
             if user and user[1] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = user[0]  # POPRAWKA: pobranie czystego tekstu imienia
+                st.session_state.user_imie = str(user[0])  # POPRAWKA: Pobranie czystego tekstu imienia bez formatu krotki!
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -145,7 +146,7 @@ wybrana_zakladka = st.sidebar.radio(
 )
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
-# --- POBIERANIE AKTUALNYCH DANYCH Z BAZY ---
+# Pobieranie aktualnych ofert
 conn = sqlite3.connect(DB_FILE)
 c = conn.cursor()
 c.execute("SELECT id, nick, imie, kierunek, start, koniec, w_zamian FROM oferty")
@@ -233,5 +234,3 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             
             if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
                 conn = sqlite3.connect(DB_FILE)
-                c = conn.cursor()
-                c.execute("DELETE FROM oferty WHERE id = ?", (o['id'],))
