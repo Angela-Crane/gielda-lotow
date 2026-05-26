@@ -9,9 +9,9 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-KONTA_FILE = "dane_konta.json"
-OFERTY_FILE = "dane_oferty.json"
-PROP_FILE = "dane_propozycje.json"
+KONTA_FILE = "finalne_konta.json"
+OFERTY_FILE = "finalne_oferty.json"
+PROP_FILE = "finalne_propozycje.json"
 
 # ==================== SYSTEM TRWAŁEGO ZAPISU (JSON) ====================
 def wczytaj_dane(sciezka, domyslne):
@@ -127,26 +127,25 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
                 st.write("---")
                 
-                klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
-                
                 st.markdown("**Co oferujesz w zamian za ten lot?**")
-                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{klucz_unikalny}").strip().upper()
+                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{o['id']}").strip().upper()
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{klucz_unikalny}")
+                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{o['id']}")
                 with col2:
-                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{klucz_unikalny}")
+                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{o['id']}")
                     
-                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{klucz_unikalny}", placeholder="np. Szukam wolnego, rejs LO123...")
+                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o['id']}", placeholder="np. Szukam wolnego...")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{klucz_unikalny}", use_container_width=True):
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
                     if p_kierunek:
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
+                            # Zapis propozycji powiązany sztywno z unikalnym ID ogłoszenia
                             propozycje_db.append({
-                                "klucz_oferty": klucz_unikalny,
+                                "id_oferty": o["id"],
                                 "kierunek_oferty": o["kierunek"],
                                 "daty_oferty": f"{o['start']} do {o['koniec']}",
                                 "wlasciciel_nick": o["nick"],
@@ -181,7 +180,11 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
+                # Generowanie prostego, unikalnego ID numerycznego opartego na czasie
+                nowe_id = int(datetime.now().timestamp() * 1000)
+                
                 oferty_db.append({
+                    "id": nowe_id,
                     "nick": st.session_state.user_nick,
                     "imie": st.session_state.user_imie,
                     "kierunek": kierunek,
@@ -189,7 +192,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                zapisz_dane(OFERTY_FILE, oferty_db) # <-- NAPRAWIONA LINIJKA 193
+                zapisz_dane(OFERTY_FILE, oferty_db)
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -208,14 +211,10 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
             
-            klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
-            if st.button("Usuń ogłoszenie", key=f"del_{klucz_unikalny}", use_container_width=True):
+            if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
                 oferty_db.remove(o)
                 zapisz_dane(OFERTY_FILE, oferty_db)
-                propozycje_db = [p for p in propozycje_db if p["klucz_oferty"] != klucz_unikalny]
+                # Czyszczenie powiązanych propozycji po sztywnym ID ogłoszenia
+                propozycje_db = [p for p in propozycje_db if p["id_oferty"] != o["id"]]
                 zapisz_dane(PROP_FILE, propozycje_db)
                 st.success("Ogłoszenie usunięte!")
-                st.rerun()
-            st.divider()
-
-# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
