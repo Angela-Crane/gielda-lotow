@@ -18,8 +18,12 @@ DB_FILE = "baza_lotow.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    
+    # !!! FUNKCJA RESETU !!!
+    # Usuwamy stare tabele przy tym uruchomieniu, aby całkowicie opróżnić aplikację
     c.execute("DROP TABLE IF EXISTS rotacje")
     c.execute("DROP TABLE IF EXISTS uzytkownicy")
+    
     c.execute('''
         CREATE TABLE IF NOT EXISTS rotacje (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -234,5 +238,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.success("Rotacja została dodana do bazy!")
                 st.rerun()
             else:
-                st.error("Wypełnij wszystkie pola.")
-
