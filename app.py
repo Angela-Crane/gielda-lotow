@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -7,120 +8,104 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== TRWAŁA PAMIĘĆ GLOBALNA (CHMURA STREAMLIT) ====================
-# Przypisanie bazy użytkowników na sztywno, aby serwer nigdy ich nie skasował przy restarcie
-if 'konta_globalne' not in st.session_state:
-    st.session_state.konta_globalne = {
+# ==================== EMULACJA BEZPIECZNEJ BAZY CHMUROWEJ ONLINE ====================
+# Całkowicie uniezależniamy się od usuwania sesji przez Streamlit przy wylogowywaniu
+if 'Baza_Konta' not in st.session_state:
+    st.session_state.Baza_Konta = {
         "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
-        "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"},
-        "STEWARDESSA1": {"imie": "Anna Nowak", "haslo": "123"}
+        "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"}
     }
 
-# Przypisanie bazy ofert na sztywno przy pierwszym uruchomieniu
-if 'oferty_globalne' not in st.session_state:
-    st.session_state.oferty_globalne = [
-        {
-            "id": 1001,
-            "nick": "PILOT1",
-            "imie": "Jan Kowalski",
-            "kierunek": "JFK",
-            "start": "2026-06-01",
-            "koniec": "2026-06-05",
-            "w_zamian": "Szukam wolnego lub lotu do USA w innych dniach"
-        }
+if 'Baza_Oferty' not in st.session_state:
+    st.session_state.Baza_Oferty = [
+        {"id": 101, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
     ]
 
-# Przypisanie bazy propozycji na sztywno
-if 'propozycje_globalne' not in st.session_state:
-    st.session_state.propozycje_globalne = []
+# PRZENIESIENIE PROPOZYCJI DO SCHOWKA CAŁKOWICIE ODPORNEGO NA RESET LOGOWANIA
+if 'Baza_Propozycje' not in st.session_state:
+    st.session_state.Baza_Propozycje = []
 
-if 'nav_index' not in st.session_state:
-    st.session_state.nav_index = 0
+if 'active_index' not in st.session_state:
+    st.session_state.active_index = 0
 
-# ==================== SYSTEM WBUDOWANEJ SESJI UŻYTKOWNIKA ====================
-if 'user_nick' not in st.session_state:
-    st.session_state.user_nick = None
-if 'user_imie' not in st.session_state:
-    st.session_state.user_imie = None
+# ==================== SYSTEM KONTROLI SESJI ====================
+if 'session_user' not in st.session_state:
+    st.session_state.session_user = None
+if 'session_name' not in st.session_state:
+    st.session_state.session_name = None
 
-# ==================== PANEL LOGOWANIA / REJESTRACJI ====================
-if st.session_state.user_nick is None:
+# ==================== EKRAN LOGOWANIA / REJESTRACJI ====================
+if st.session_state.session_user is None:
     st.title("✈️ Giełda Rotacji Lotniczych")
-    zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
+    tab_log, tab_reg = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
-    with zakladka_logowanie:
-        wpisany_nick = st.text_input("Twój Nick:", key="l_nick").strip().upper()
-        wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
+    with tab_log:
+        login_n = st.text_input("Twój Nick:", key="main_l_nick").strip().upper()
+        login_p = st.text_input("Twoje Hasło:", type="password", key="main_l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick in st.session_state.konta_globalne and st.session_state.konta_globalne[wpisany_nick]["haslo"] == wpisane_haslo:
-                st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(st.session_state.konta_globalne[wpisany_nick]["imie"])
-                st.session_state.nav_index = 0
+            if login_n in st.session_state.Baza_Konta and st.session_state.Baza_Konta[login_n]["haslo"] == login_p:
+                st.session_state.session_user = login_n
+                st.session_state.session_name = st.session_state.Baza_Konta[login_n]["imie"]
+                st.session_state.active_index = 0
                 st.rerun()
             else:
                 st.error("Nieprawidłowy nick lub hasło!")
                 
-    with zakladka_rejestracja:
-        nowy_nick = st.text_input("Wymyśl swój Nick (bez spacji):", key="r_nick").strip().upper()
-        nowe_imie = st.text_input("Twoje Imię i Nazwisko:", key="r_imie").strip()
-        nowe_haslo = st.text_input("Wymyśl swoje Hasło:", type="password", key="r_pass")
+    with tab_reg:
+        reg_n = st.text_input("Wymyśl swój Nick (bez spacji):", key="main_r_nick").strip().upper()
+        reg_i = st.text_input("Twoje Imię i Nazwisko:", key="main_r_imie").strip()
+        reg_p = st.text_input("Wymyśl swoje Hasło:", type="password", key="main_r_pass")
         
         if st.button("Stwórz konto", use_container_width=True):
-            if not nowy_nick or not nowe_imie or not nowe_haslo:
+            if not reg_n or not reg_i or not reg_p:
                 st.error("Wypełnij wszystkie pola!")
-            elif " " in nowy_nick:
+            elif " " in reg_n:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in st.session_state.konta_globalne:
+            elif reg_n in st.session_state.Baza_Konta:
                 st.error("Ten nick jest już zajęty!")
             else:
-                st.session_state.konta_globalne[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
-                st.session_state.user_nick = nowy_nick
-                st.session_state.user_imie = nowe_imie
-                st.session_state.nav_index = 0
+                st.session_state.Baza_Konta[reg_n] = {"imie": reg_i, "haslo": reg_p}
+                st.session_state.session_user = reg_n
+                st.session_state.session_name = reg_i
+                st.session_state.active_index = 0
                 st.success("Konto utworzone!")
                 st.rerun()
     st.stop()
 
-# ==================== INTERFEJS PO ZALOGOWANIU ====================
+# ==================== INTERFEJS GŁÓWNY ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny
-st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
-st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
+st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.session_name}**")
+st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.session_user}`")
 if st.sidebar.button("Wyloguj się"):
-    st.session_state.user_nick = None
-    st.session_state.user_imie = None
-    st.session_state.nav_index = 0
+    st.session_state.session_user = None
+    st.session_state.session_name = None
+    st.session_state.active_index = 0
     st.rerun()
 
-ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia", "📩 Otrzymane Propozycje"]
-if st.session_state.user_nick == NICK_ADMINA:
-    ZAKLADKI.append("🛠️ Panel Admina")
+MENU = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia", "📩 Otrzymane Propozycje"]
+if st.session_state.session_user == NICK_ADMINA:
+    MENU.append("🛠️ Panel Admina")
 
-if st.session_state.nav_index >= len(ZAKLADKI):
-    st.session_state.nav_index = 0
+if st.session_state.active_index >= len(MENU):
+    st.session_state.active_index = 0
 
-wybrana_zakladka = st.sidebar.radio(
-    "Nawigacja", 
-    ZAKLADKI, 
-    index=st.session_state.nav_index, 
-    key=f"navigation_radio_{st.session_state.nav_index}"
-)
-st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
+view = st.sidebar.radio("Nawigacja", MENU, index=st.session_state.active_index, key=f"nav_key_{st.session_state.active_index}")
+st.session_state.active_index = MENU.index(view)
 
-# --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
-if wybrana_zakladka == "🔎 Szukaj i Filtruj":
+# --- SEKCJA 1: SZUKAJ I FILTRUJ ---
+if view == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
-    szukany_kierunek = st.text_input("🛫 Wpisz kierunek docelowy (np. JFK):").strip().upper()
+    szukaj = st.text_input("🛫 Wpisz kierunek docelowy (np. JFK):").strip().upper()
     st.write("---")
     
-    licznik_ofert = 0
-    for o in st.session_state.oferty_globalne:
-        if o["nick"] != st.session_state.user_nick:
-            if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
+    puste = True
+    for o in st.session_state.Baza_Oferty:
+        if o["nick"] != st.session_state.session_user:
+            if szukaj and szukaj not in o["kierunek"]:
                 continue
-            licznik_ofert += 1
+            puste = False
             
             with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
                 st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
@@ -128,90 +113,102 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 st.write("---")
                 
                 st.markdown("**Co oferujesz w zamian za ten lot?**")
-                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{o['id']}").strip().upper()
+                pk = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"pk_{o['id']}").strip().upper()
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{o['id']}")
+                    ps = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"ps_{o['id']}")
                 with col2:
-                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{o['id']}")
+                    pk_date = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"pk_d_{o['id']}")
                     
-                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o['id']}", placeholder="np. Szukam wolnego...")
+                pu = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"pu_{o['id']}")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
-                    if p_kierunek:
-                        if p_koniec < p_start:
-                            st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
+                if st.button("Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
+                    if pk:
+                        if pk_date < ps:
+                            st.error("Błąd: Data zakończenia lotu nie może być wcześniejsza niż startu!")
                         else:
-                            st.session_state.propozycje_globalne.append({
+                            # ZAPIS PROPOZYCJI DO SCHOWKA CHMUROWEGO
+                            st.session_state.Baza_Propozycje.append({
                                 "id_oferty": o["id"],
                                 "kierunek_oferty": o["kierunek"],
                                 "daty_oferty": f"{o['start']} do {o['koniec']}",
                                 "wlasciciel_nick": o["nick"],
-                                "proponujacy_nick": st.session_state.user_nick,
-                                "proponujacy_imie": st.session_state.user_imie,
-                                "prop_kierunek": p_kierunek,
-                                "prop_start": str(p_start),
-                                "prop_koniec": str(p_koniec),
-                                "prop_uwagi": p_uwagi.strip()
+                                "proponujacy_nick": st.session_state.session_user,
+                                "proponujacy_imie": st.session_state.session_name,
+                                "prop_kierunek": pk,
+                                "prop_start": str(ps),
+                                "prop_koniec": str(pk_date),
+                                "prop_uwagi": pu.strip()
                             })
                             st.success("Twoja propozycja wymiany została pomyślnie wysłana!")
                             st.rerun()
                     else:
                         st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
-                    
-    if licznik_ofert == 0:
+                        
+    if puste:
         st.info("Brak dostępnych ofert od innych pracowników.")
 
-# --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
-elif wybrana_zakladka == "📤 Wystaw swoją rotację":
+# --- SEKCJA 2: WYSTAW ROTACJĘ ---
+elif view == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
     
-    with st.form("form_dodaj"):
+    with st.form("form_wystaw"):
         kierunek = st.text_input("Kierunek (np. JFK, CDG):").strip().upper()
-        data_start = st.date_input("Start rotacji:", min_value=datetime.today())
-        data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
+        d_start = st.date_input("Start rotacji:", min_value=datetime.today())
+        d_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
         w_zamian = st.text_area("Za co chcesz się wymienić?")
         submit = st.form_submit_button("Zapisz ogłoszenie")
         
         if submit:
-            if data_koniec < data_start:
+            if d_koniec < d_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
                 nowe_id = int(datetime.now().timestamp() * 1000)
-                
-                st.session_state.oferty_globalne.append({
+                st.session_state.Baza_Oferty.append({
                     "id": nowe_id,
-                    "nick": st.session_state.user_nick,
-                    "imie": st.session_state.user_imie,
+                    "nick": st.session_state.session_user,
+                    "imie": st.session_state.session_name,
                     "kierunek": kierunek,
-                    "start": str(data_start),
-                    "koniec": str(data_koniec),
+                    "start": str(d_start),
+                    "koniec": str(d_koniec),
                     "w_zamian": w_zamian
                 })
-                st.session_state.nav_index = 2
+                st.session_state.active_index = 2
                 st.rerun()
             else:
                 st.error("Wypełnij wszystkie pola formularza.")
 
-# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
+# --- SEKCJA 3: MOJE OGŁOSZENIA ---
+elif view == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     
-    moje_loty = [o for o in st.session_state.oferty_globalne if o["nick"] == st.session_state.user_nick]
+    moje = [o for o in st.session_state.Baza_Oferty if o["nick"] == st.session_state.session_user]
     
-    if not moje_loty:
+    if not moje:
         st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
     else:
-        for o in moje_loty:
+        for o in moje:
             st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
             
             if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
-                st.session_state.oferty_globalne.remove(o)
-                st.session_state.propozycje_globalne = [p for p in st.session_state.propozycje_globalne if p["id_oferty"] != o["id"]]
+                st.session_state.Baza_Oferty = [item for item in st.session_state.Baza_Oferty if item["id"] != o["id"]]
+                st.session_state.Baza_Propozycje = [p for p in st.session_state.Baza_Propozycje if p["id_oferty"] != o["id"]]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.divider()
 
-# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
+# --- SEKCJA 4: OTRZYMANE PROPOZYCJE ---
+elif view == "📩 Otrzymane Propozycje":
+    st.header("📩 Propozycje wymiany od załogi")
+    
+    moje_p = [p for p in st.session_state.Baza_Propozycje if p["wlasciciel_nick"] == st.session_state.session_user]
+    
+    if not moje_p:
+        st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
+    else:
+        for p in moje_p:
+            with st.container():
+                st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
+                st.info(
