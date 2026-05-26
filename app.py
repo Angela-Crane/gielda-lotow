@@ -207,10 +207,10 @@ elif view == "📩 Otrzymane Propozycje":
     if not moje_p:
         st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
     else:
+        # Pętla wyświetlająca każdą propozycję jako elegancką rozwijaną kartę lotu
         for idx, p in enumerate(moje_p):
-            with st.container():
-                # POPRAWKA LINII 210: Bezpieczne pobieranie (.get) chroni przed błędami starej pamięci
-                kier_oferty = p.get('kierunek_oferty', 'BRAK')
-                daty_oferty = p.get('daty_oferty', 'Nieznane daty')
-                
-                st.write(f"📌 Dotyczy Twojego lotu: **{kier_oferty}** ({daty_oferty})")
+            kier_oferty = p.get('kierunek_oferty', 'BRAK')
+            daty_oferty = p.get('daty_oferty', 'Nieznane daty')
+            
+            # --- ROZWIJANY EXPANDER ZAMIAST ZWYKŁEGO TEKSTU ---
+            with st.expander(f"📌 Oferta do lotu: {kier_oferty} ({daty_oferty})", expanded=False):
