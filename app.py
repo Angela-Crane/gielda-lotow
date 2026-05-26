@@ -1,6 +1,7 @@
 import streamlit as st
-import pandas as pd
+import json
 import urllib.request
+import csv
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -12,13 +13,13 @@ NICK_ADMINA = "RUTKSA17"
 # Bezpośredni link pobierania z Twojego Secrets
 try:
     SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    BASE_URL = SHEET_URL.split("/edit")[0] if "edit" in SHEET_URL else SHEET_URL
+    BASE_URL = SHEET_URL.split("/edit") if "edit" in SHEET_URL else SHEET_URL
 except Exception:
     st.error("❌ Brak konfiguracji! Upewnij się, że poprawnie zapisałaś link w panelu Secrets.")
     st.stop()
 
 def pobierz_dane_z_chmury(gid_zakladki):
-    """Pobiera dane online bezpośrednio z Twojego arkusza Google."""
+    """Pobiera dane online bezpośrednio z Twojego arkusza Google przy użyciu pancernego parsera CSV."""
     url = f"{BASE_URL}/export?format=csv&gid={gid_zakladki}"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -27,24 +28,25 @@ def pobierz_dane_z_chmury(gid_zakladki):
         
         wynik = []
         if len(linie) > 0:
-            naglowki = [n.replace('"', '').strip() for n in linie[0].split(',')]
-            for linia in linie[1:]:
-                wartosci = [w.replace('"', '').strip() for w in linia.split(',')]
-                if len(wartosci) == len(naglowki):
-                    wynik.append(dict(zip(naglowki, wartosci)))
+            # Używamy wbudowanego modułu csv, który idealnie radzi sobie z przecinkami w tekstach
+            reader = csv.DictReader(linie)
+            for row in reader:
+                # Czyszczenie cudzysłowów i spacji z danych
+                czysty_wiersz = {str(k).strip(): str(v).strip() for k, v in row.items() if k is not None}
+                wynik.append(czysty_wiersz)
         return wynik
     except Exception:
         return []
 
-# Dynamiczne pobieranie ID zakładek z adresu URL w przeglądarce
-OFERTY_GID = "0"          # Pierwsza zakładka Twojego arkusza
-PROPOZYCJE_GID = "371196582" # Druga zakładka (wartość z Twojego okna Secrets!)
+# Identyfikatory GID zakładki z Twojego adresu URL w przeglądarce
+OFERTY_GID = "0"          
+PROPOZYCJE_GID = "371196582" 
 
 # Pobranie trwałych danych z dysku Google
 oferty_db = pobierz_dane_z_chmury(OFERTY_GID)
 propozycje_db = pobierz_dane_z_chmury(PROPOZYCJE_GID)
 
-# Lokalne bazy zapasowe, gdy chmura jest pusta
+# Lokalne bazy zapasowe na wypadek braku połączenia lub pustego arkusza
 if 'konta_zapas' not in st.session_state:
     st.session_state.konta_zapas = {
         "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
@@ -52,12 +54,12 @@ if 'konta_zapas' not in st.session_state:
     }
 if 'oferty_zapas' not in st.session_state:
     st.session_state.oferty_zapas = [
-        {"id": "101", "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
+        {"id": "1001", "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
     ]
 if 'propozycje_zapas' not in st.session_state:
     st.session_state.propozycje_zapas = []
 
-# Łączenie i synchronizacja
+# Łączenie i bezpieczna synchronizacja baz danych
 wszystkie_oferty = oferty_db if oferty_db else st.session_state.oferty_zapas
 wszystkie_propozycje = propozycje_db if propozycje_db else st.session_state.propozycje_zapas
 
@@ -132,10 +134,16 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
     szukany_kierunek = st.text_input("Wpisz kierunek docelowy (np. JFK):").strip().upper()
     
+    licznik_ofert = 0
     for o in wszystkie_oferty:
+        # PANCERNE ZABEZPIECZENIE LINII 203: Sprawdzamy czy 'o' to słownik, ignorując uszkodzone rekordy tekstowe
+        if not isinstance(o, dict) or "nick" not in o:
+            continue
+            
         if str(o.get("nick")).upper() != st.session_state.user_nick.upper():
             if szukany_kierunek and szukany_kierunek not in str(o.get("kierunek", "")):
                 continue
+            licznik_ofert += 1
             
             o_id = str(o.get("id", "101"))
             with st.expander(f"✈️ {o.get('kierunek')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
@@ -155,7 +163,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 
                 if st.button("Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
                     if p_kierunek:
-                        st.session_state.zapasowe_propozycje.append({
+                        st.session_state.propozycje_zapas.append({
                             "id_oferty": o_id,
                             "kierunek_oferty": str(o.get("kierunek")),
                             "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
@@ -169,6 +177,9 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         })
                         st.success("🎉 Wysłano pomyślnie!")
                         st.rerun()
+
+    if licznik_ofert == 0:
+        st.info("Brak dostępnych ofert od innych pracowników.")
 
 # --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
@@ -192,12 +203,5 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 # --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
-    moje_loty = [o for o in wszystkie_oferty if str(o.get("nick")).upper() == st.session_state.user_nick.upper()]
+    moje_loty = [o for o in wszystkie_oferty if isinstance(o, dict) and str(o.get("nick")).upper() == st.session_state.user_nick.upper()]
     
-    if not moje_loty:
-        st.info("Nie wystawiłeś obecnie żadnych lotów.")
-    else:
-        for o in moje_loty:
-            st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
-            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
-            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
