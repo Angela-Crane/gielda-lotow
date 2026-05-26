@@ -212,5 +212,4 @@ elif view == "📩 Otrzymane Propozycje":
             kier_oferty = p.get('kierunek_oferty', 'BRAK')
             daty_oferty = p.get('daty_oferty', 'Nieznane daty')
             
-            # --- ROZWIJANY EXPANDER ZAMIAST ZWYKŁEGO TEKSTU ---
             with st.expander(f"📌 Oferta do lotu: {kier_oferty} ({daty_oferty})", expanded=False):
