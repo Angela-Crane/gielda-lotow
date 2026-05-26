@@ -70,7 +70,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -174,8 +174,6 @@ if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
     ZAKLADKI.append("🛠️ Panel Admina")
 
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
-
-# Pobieranie bazy danych z serwera
 baza_rotacji = pobierz_dane()
 
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
@@ -232,8 +230,10 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             elif nowy_kierunek and w_zamian:
                 dodaj_rotacje_db(st.session_state.zalogowany_nick, str(data_start), str(data_koniec), nowy_kierunek, w_zamian)
                 st.success("Rotacja została dodana do bazy!")
-                st.rerun()  # Wymusza natychmiastowe odświeżenie danych na stronie
+                st.rerun()
             else:
                 st.error("Wypełnij wszystkie pola.")
 
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    swieza_baza = pobierz_dane()
