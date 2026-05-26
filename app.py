@@ -1,4 +1,6 @@
 import streamlit as st
+import sqlite3
+import hashlib
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -7,28 +9,63 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== PAMIĘĆ APLIKACJI ====================
-if 'konta' not in st.session_state:
-    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}}
+DB_FILE = "gielda_nowa.db"
 
-if 'oferty' not in st.session_state:
-    st.session_state.oferty = []
+# ==================== INICJALIZACJA STAŁEJ BAZY DANYCH ====================
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # Tabela kont użytkowników
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS uzytkownicy (
+            nick TEXT PRIMARY KEY,
+            imie TEXT,
+            haslo TEXT
+        )
+    ''')
+    # Tabela ogłoszeń rotacji
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS oferty (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nick TEXT,
+            imie TEXT,
+            kierunek TEXT,
+            start TEXT,
+            koniec TEXT,
+            w_zamian TEXT
+        )
+    ''')
+    # Tabela propozycji wymiany
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS propozycje (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_oferty INTEGER,
+            kierunek_oferty TEXT,
+            daty_oferty TEXT,
+            wlasciciel_nick TEXT,
+            proponujacy_nick TEXT,
+            proponujacy_imie TEXT,
+            co_proponuje TEXT
+        )
+    ''')
+    # Automatyczne dodanie konta administratora, jeśli baza jest czysta
+    c.execute("SELECT 1 FROM uzytkownicy WHERE nick = 'RUTKSA17'")
+    if not c.fetchone():
+        c.execute("INSERT INTO uzytkownicy (nick, imie, haslo) VALUES ('RUTKSA17', 'ADMINISTRATOR', 'ADMIN123')")
+    conn.commit()
+    conn.close()
 
-if 'propozycje' not in st.session_state:
-    st.session_state.propozycje = []
+init_db()
 
-if 'licznik_id_ofert' not in st.session_state:
-    st.session_state.licznik_id_ofert = 1
-
-if 'nav_index' not in st.session_state:
-    st.session_state.nav_index = 0
-
-# ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
+# ==================== OBSŁUGA TRWAŁEJ SESJI (Ciasteczka w przeglądarce) ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
     st.session_state.user_imie = None
+if 'nav_index' not in st.session_state:
+    st.session_state.nav_index = 0
 
+# ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
 if st.session_state.user_nick is None:
     st.title("✈️ Giełda Rotacji Lotniczych")
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
@@ -38,9 +75,15 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick in st.session_state.konta and st.session_state.konta[wpisany_nick]["haslo"] == wpisane_haslo:
+            conn = sqlite3.connect(DB_FILE)
+            c = conn.cursor()
+            c.execute("SELECT imie, haslo FROM uzytkownicy WHERE nick = ?", (wpisany_nick,))
+            user = c.fetchone()
+            conn.close()
+            
+            if user and user[1] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = st.session_state.konta[wpisany_nick]["imie"]
+                st.session_state.user_imie = user[0]
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -56,20 +99,30 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in st.session_state.konta:
-                st.error("Ten nick jest już zajęty!")
             else:
-                st.session_state.konta[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
-                st.session_state.user_nick = nowy_nick
-                st.session_state.user_imie = nowe_imie
-                st.session_state.nav_index = 0
-                st.success("Konto utworzone!")
-                st.rerun()
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute("SELECT 1 FROM uzytkownicy WHERE nick = ?", (nowy_nick,))
+                zajety = c.fetchone()
+                
+                if zajety:
+                    st.error("Ten nick jest już zajęty!")
+                    conn.close()
+                else:
+                    c.execute("INSERT INTO uzytkownicy (nick, imie, haslo) VALUES (?, ?, ?)", (nowy_nick, nowe_imie, nowe_haslo))
+                    conn.commit()
+                    conn.close()
+                    st.session_state.user_nick = nowy_nick
+                    st.session_state.user_imie = nowe_imie
+                    st.session_state.nav_index = 0
+                    st.success("Konto utworzone!")
+                    st.rerun()
     st.stop()
 
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
+# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -91,8 +144,14 @@ wybrana_zakladka = st.sidebar.radio(
     index=st.session_state.nav_index, 
     key=f"navigation_radio_{st.session_state.nav_index}"
 )
-
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
+
+# --- POBIERANIE AKTUALNYCH DANYCH Z BAZY ---
+conn = sqlite3.connect(DB_FILE)
+c = conn.cursor()
+c.execute("SELECT id, nick, imie, kierunek, start, koniec, w_zamian FROM oferty")
+wszystkie_oferty = [{"id": r[0], "nick": r[1], "imie": r[2], "kierunek": r[3], "start": r[4], "koniec": r[5], "w_zamian": r[6]} for r in c.fetchall()]
+conn.close()
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
@@ -101,35 +160,30 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for o in st.session_state.oferty:
-        if not isinstance(o, dict) or "nick" not in o:
-            continue
-            
+    for o in wszystkie_oferty:
         if o["nick"] != st.session_state.user_nick:
-            if szukany_kierunek and szukany_kierunek not in o.get("kierunek", "").upper():
+            if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
             licznik_ofert += 1
-            o_id = o.get("id", 0)
             
-            with st.expander(f"✈️ {o.get('kierunek', 'BRAK')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
-                st.write(f"👤 **Wystawca:** {o.get('imie')} (`@{o.get('nick')}`)")
-                st.write(f"🔄 **Chce w zamian:** {o.get('w_zamian')}")
+            with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
+                st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
+                st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
                 st.write("---")
                 
-                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o_id}", placeholder="Wpisz rejs lub daty...")
+                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o['id']}", placeholder="Wpisz rejs lub daty...")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
                     if tekst_propozycji.strip():
-                        st.session_state.propozycje.append({
-                            "id_oferty": o_id,
-                            "kierunek_oferty": o.get("kierunek"),
-                            "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
-                            "wlasciciel_nick": o.get("nick"),
-                            "proponujacy_nick": st.session_state.user_nick,
-                            "proponujacy_imie": st.session_state.user_imie,
-                            "co_proponuje": tekst_propozycji.strip()
-                        })
-                        st.success(f"Twój warunek wymiany został wysłany!")
+                        conn = sqlite3.connect(DB_FILE)
+                        c = conn.cursor()
+                        c.execute('''
+                            INSERT INTO propozycje (id_oferty, kierunek_oferty, daty_oferty, wlasciciel_nick, proponujacy_nick, proponujacy_imie, co_proponuje)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', (o['id'], o['kierunek'], f"{o['start']} do {o['koniec']}", o['nick'], st.session_state.user_nick, st.session_state.user_imie, tekst_propozycji.strip()))
+                        conn.commit()
+                        conn.close()
+                        st.success("Twój warunek wymiany został wysłany!")
                         st.rerun()
                     else:
                         st.error("Wpisz najpierw, co oferujesz w zamian!")
@@ -152,16 +206,14 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
-                st.session_state.oferty.append({
-                    "id": int(st.session_state.licznik_id_ofert),
-                    "nick": str(st.session_state.user_nick),
-                    "imie": str(st.session_state.user_imie),
-                    "kierunek": str(kierunek),
-                    "start": str(data_start),
-                    "koniec": str(data_koniec),
-                    "w_zamian": str(w_zamian)
-                })
-                st.session_state.licznik_id_ofert += 1
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute('''
+                    INSERT INTO oferty (nick, imie, kierunek, start, koniec, w_zamian)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (st.session_state.user_nick, st.session_state.user_imie, kierunek, str(data_start), str(data_koniec), w_zamian))
+                conn.commit()
+                conn.close()
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -171,47 +223,16 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     
-    # Pancerna i bezpieczna pętla wyświetlania bez usuwania obiektów w locie
-    licznik_moich = 0
-    for o in st.session_state.oferty:
-        if isinstance(o, dict) and o.get("nick") == st.session_state.user_nick:
-            licznik_moich += 1
-            st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
-            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
-            
-            # Bezpieczne czyszczenie na podstawie ID
-            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
-                id_do_usuniecia = o.get("id")
-                st.session_state.oferty = [item for item in st.session_state.oferty if isinstance(item, dict) and item.get("id") != id_do_usuniecia]
-                st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != id_do_usuniecia]
-                st.success("Ogłoszenie usunięte!")
-                st.rerun()
-            st.divider()
-            
-    if licznik_moich == 0:
-        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
-
-# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
-elif wybrana_zakladka == "📩 Otrzymane Propozycje":
-    st.header("📩 Propozycje wymiany od załogi")
+    moje_loty = [o for o in wszystkie_oferty if o["nick"] == st.session_state.user_nick]
     
-    licznik_prop = 0
-    for p in st.session_state.propozycje:
-        if isinstance(p, dict) and p.get("wlasciciel_nick") == st.session_state.user_nick:
-            licznik_prop += 1
-            with st.container():
-                st.write(f"📌 Dotyczy Twojego lotu: **{p.get('kierunek_oferty')}** ({p.get('daty_oferty')})")
-                st.info(f"👤 **{p.get('proponujacy_imie')}** (`@{p.get('proponujacy_nick')}`) oferuje w zamian:\n\n**{p.get('co_proponuje')}**")
-                
-                if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
-                    st.session_state.propozycje = [item for item in st.session_state.propozycje if item != p]
-                    st.success("Propozycja została odrzucona.")
-                    st.rerun()
-                st.write("---")
-                
-    if licznik_prop == 0:
-        st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
-
-# --- ZAKŁADKA 5: PANEL ADMINA ---
-elif wybrana_zakladka == "🛠️ Panel Admina":
-    st.header("🛠️ Panel Zarządzania Użytkownikami")
+    if not moje_loty:
+        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
+    else:
+        for o in moje_loty:
+            st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
+            st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
+            
+            if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
+                conn = sqlite3.connect(DB_FILE)
+                c = conn.cursor()
+                c.execute("DELETE FROM oferty WHERE id = ?", (o['id'],))
