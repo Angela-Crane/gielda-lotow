@@ -89,7 +89,7 @@ if st.session_state.user_nick == NICK_ADMINA:
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
-# Wyświetlanie menu bocznego z wymuszonym odświeżaniem klucza (key), co naprawia błąd kropki
+# Wyświetlanie menu bocznego
 wybrana_zakladka = st.sidebar.radio(
     "Nawigacja", 
     ZAKLADKI, 
@@ -170,7 +170,6 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "w_zamian": w_zamian
                 })
                 st.session_state.licznik_id_ofert += 1
-                # Zmiana indeksu nawigacji na 2 przed przeładowaniem wymusi ruch kropki
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -191,11 +190,12 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
         for o in moje_loty:
             o_id = o.get("id", f"{o.get('kierunek')}_{o.get('start')}")
             st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
-            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
+            st.write(f"🔄 Oczekiwania: {o.get('w_zamian']}")
             if st.button("Usuń ogłoszenie", key=f"del_{o_id}", use_container_width=True):
                 if o in st.session_state.oferty:
                     st.session_state.oferty.remove(o)
-                st.session_state.propozycje = [p for p in st.session_state.propozycje if p.get("id_oferty") != o_id]
+                # Zabezpieczone usuwanie z walidacją typów słownika (naprawa linii 220)
+                st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != o_id]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.write("---")
@@ -218,3 +218,4 @@ elif wybrana_zakladka == "📩 Otrzymane Propozycje":
                 st.info(f"👤 **{p.get('proponujacy_imie')}** (`@{p.get('proponujacy_nick')}`) oferuje w zamian:\n\n**{p.get('co_proponuje')}**")
                 
                 if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
+                    if p in st.session_state.propozycje:
