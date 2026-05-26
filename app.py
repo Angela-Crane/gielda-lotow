@@ -7,7 +7,7 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== CAŁKOWICIE UPROSZCZONA PAMIĘĆ ====================
+# ==================== PAMIĘĆ APLIKACJI ====================
 if 'konta' not in st.session_state:
     st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}}
 
@@ -20,7 +20,6 @@ if 'propozycje' not in st.session_state:
 if 'licznik_id_ofert' not in st.session_state:
     st.session_state.licznik_id_ofert = 1
 
-# Inicjalizacja domyślnego indeksu dla nawigacji
 if 'nav_index' not in st.session_state:
     st.session_state.nav_index = 0
 
@@ -71,7 +70,6 @@ if st.session_state.user_nick is None:
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -80,7 +78,6 @@ if st.sidebar.button("Wyloguj się"):
     st.session_state.nav_index = 0
     st.rerun()
 
-# Dynamiczna lista zakładek
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia", "📩 Otrzymane Propozycje"]
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
@@ -88,7 +85,6 @@ if st.session_state.user_nick == NICK_ADMINA:
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
-# Wyświetlanie menu bocznego
 wybrana_zakladka = st.sidebar.radio(
     "Nawigacja", 
     ZAKLADKI, 
@@ -96,16 +92,13 @@ wybrana_zakladka = st.sidebar.radio(
     key=f"navigation_radio_{st.session_state.nav_index}"
 )
 
-# Zapis aktualnej pozycji użytkownika, gdy klika ręcznie
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
     szukany_kierunek = st.text_input("🛫 Wpisz kierunek docelowy (np. JFK):").strip().upper()
-    
     st.write("---")
-    st.subheader("Dostępne loty innych pracowników:")
     
     licznik_ofert = 0
     for o in st.session_state.oferty:
@@ -116,14 +109,13 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
             if szukany_kierunek and szukany_kierunek not in o.get("kierunek", "").upper():
                 continue
             licznik_ofert += 1
-            
-            o_id = o.get("id", f"{o.get('kierunek')}_{o.get('start')}")
+            o_id = o.get("id", 0)
             
             with st.expander(f"✈️ {o.get('kierunek', 'BRAK')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
                 st.write(f"👤 **Wystawca:** {o.get('imie')} (`@{o.get('nick')}`)")
                 st.write(f"🔄 **Chce w zamian:** {o.get('w_zamian')}")
-                
                 st.write("---")
+                
                 tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o_id}", placeholder="Wpisz rejs lub daty...")
                 
                 if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
@@ -137,7 +129,8 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                             "proponujacy_imie": st.session_state.user_imie,
                             "co_proponuje": tekst_propozycji.strip()
                         })
-                        st.success(f"Twój warunek wymiany został wysłany do @{o.get('nick')}!")
+                        st.success(f"Twój warunek wymiany został wysłany!")
+                        st.rerun()
                     else:
                         st.error("Wpisz najpierw, co oferujesz w zamian!")
                     
@@ -160,13 +153,13 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
                 st.session_state.oferty.append({
-                    "id": st.session_state.licznik_id_ofert,
-                    "nick": st.session_state.user_nick,
-                    "imie": st.session_state.user_imie,
-                    "kierunek": kierunek,
+                    "id": int(st.session_state.licznik_id_ofert),
+                    "nick": str(st.session_state.user_nick),
+                    "imie": str(st.session_state.user_imie),
+                    "kierunek": str(kierunek),
                     "start": str(data_start),
                     "koniec": str(data_koniec),
-                    "w_zamian": w_zamian
+                    "w_zamian": str(w_zamian)
                 })
                 st.session_state.licznik_id_ofert += 1
                 st.session_state.nav_index = 2
@@ -178,42 +171,47 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     
-    moje_loty = []
+    # Pancerna i bezpieczna pętla wyświetlania bez usuwania obiektów w locie
+    licznik_moich = 0
     for o in st.session_state.oferty:
         if isinstance(o, dict) and o.get("nick") == st.session_state.user_nick:
-            moje_loty.append(o)
-            
-    if not moje_loty:
-        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
-    else:
-        for o in moje_loty:
-            o_id = o.get("id", f"{o.get('kierunek')}_{o.get('start')}")
+            licznik_moich += 1
             st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
-            st.write(f"🔄 Oczekiwania: {o.get('w_zamian']}")
+            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
             
-            # Bezpieczne przepisywanie listy zamiast .remove() (całkowicie naprawia linię 192 i 193)
-            if st.button("Usuń ogłoszenie", key=f"del_{o_id}", use_container_width=True):
-                st.session_state.oferty = [item for item in st.session_state.oferty if isinstance(item, dict) and item.get("id") != o.get("id")]
-                st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != o_id]
+            # Bezpieczne czyszczenie na podstawie ID
+            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
+                id_do_usuniecia = o.get("id")
+                st.session_state.oferty = [item for item in st.session_state.oferty if isinstance(item, dict) and item.get("id") != id_do_usuniecia]
+                st.session_state.propozycje = [p for p in st.session_state.propozycje if isinstance(p, dict) and p.get("id_oferty") != id_do_usuniecia]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.divider()
+            
+    if licznik_moich == 0:
+        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
 
 # --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
 elif wybrana_zakladka == "📩 Otrzymane Propozycje":
     st.header("📩 Propozycje wymiany od załogi")
     
-    moje_propozycje = []
+    licznik_prop = 0
     for p in st.session_state.propozycje:
         if isinstance(p, dict) and p.get("wlasciciel_nick") == st.session_state.user_nick:
-            moje_propozycje.append(p)
-    
-    if not moje_propozycje:
-        st.info("Nie otrzymałeś jeszcze żadnych konkretnych propozycji wymiany.")
-    else:
-        for p in moje_propozycje:
+            licznik_prop += 1
             with st.container():
                 st.write(f"📌 Dotyczy Twojego lotu: **{p.get('kierunek_oferty')}** ({p.get('daty_oferty')})")
                 st.info(f"👤 **{p.get('proponujacy_imie')}** (`@{p.get('proponujacy_nick')}`) oferuje w zamian:\n\n**{p.get('co_proponuje')}**")
                 
                 if st.button("Odrzuć tę propozycję", key=f"Reject_{p.get('id_oferty')}_{p.get('proponujacy_nick')}", use_container_width=True):
+                    st.session_state.propozycje = [item for item in st.session_state.propozycje if item != p]
+                    st.success("Propozycja została odrzucona.")
+                    st.rerun()
+                st.write("---")
+                
+    if licznik_prop == 0:
+        st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
+
+# --- ZAKŁADKA 5: PANEL ADMINA ---
+elif wybrana_zakladka == "🛠️ Panel Admina":
+    st.header("🛠️ Panel Zarządzania Użytkownikami")
