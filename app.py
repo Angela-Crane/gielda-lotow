@@ -4,20 +4,17 @@ import sqlite3
 import hashlib
 from datetime import datetime
 
-# Konfiguracja strony mobilnej
+# Konfiguracja strony
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
 def szyfruj_haslo(haslo):
-    """Szyfruje hasło osobiste za pomocą bezpiecznego algorytmu SHA-256."""
     return hashlib.sha256(str.encode(haslo)).hexdigest()
 
-# ==================== FUNKCJE BAZY DANYCH (SQLite) ====================
 DB_FILE = "baza_lotow.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # Tabela rotacji
     c.execute('''
         CREATE TABLE IF NOT EXISTS rotacje (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +25,6 @@ def init_db():
             w_zamian TEXT
         )
     ''')
-    # Tabela użytkowników
     c.execute('''
         CREATE TABLE IF NOT EXISTS uzytkownicy (
             nick TEXT PRIMARY KEY,
@@ -98,30 +94,21 @@ def usun_rotacje_db(id_rotacji, nick):
     conn.commit()
     conn.close()
 
-# Uruchomienie bazy danych
 init_db()
 
-# ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
 if 'zalogowany_nick' not in st.session_state:
     st.session_state.zalogowany_nick = None
 if 'zalogowany_imie' not in st.session_state:
     st.session_state.zalogowany_imie = None
 
 if st.session_state.zalogowany_nick is None:
-    st.markdown("""
-        <div style="background-color:#1E3A8A;padding:20px;border-radius:10px;text-align:center;margin-bottom:25px">
-            <h1 style="color:white;margin:0;font-size:28px;">✈️ Giełda Rotacji Lotniczych</h1>
-            <p style="color:#93C5FD;margin:5px 0 0 0;font-size:14px;">Panel bezpiecznej wymiany grafików dla załóg</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.title("✈️ Giełda Rotacji Lotniczych")
     
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
-        st.write("")
         wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
         wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
-        st.write("")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
             if wpisany_nick and wpisane_haslo:
@@ -137,11 +124,9 @@ if st.session_state.zalogowany_nick is None:
                 st.warning("Uzupełnij oba pola logowania.")
                 
     with zakladka_rejestracja:
-        st.write("")
         nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Podaj unikalny login, którego używasz w systemie linii lotniczych", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
-        st.write("")
         
         if st.button("Stwórz konto", use_container_width=True):
             if not nowy_nick or not nowe_imie or not nowe_haslo_osobiste:
@@ -161,10 +146,8 @@ if st.session_state.zalogowany_nick is None:
                     st.error("Coś poszło nie tak. Spróbuj ponownie.")
     st.stop()
 
-# ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.zalogowany_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.zalogowany_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -177,13 +160,10 @@ wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
 
 baza_rotacji = pobierz_dane()
 
-# --- ZAKŁADKA 1: FILTROWANIE ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
-    
     st.subheader("Filtry wyszukiwania")
     col1, col2 = st.columns(2)
-    
     with col1:
         szukany_kierunek = st.text_input("🛫 Kierunek docelowy (np. JFK):", "").strip()
     with col2:
@@ -197,15 +177,14 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         wyniki = wyniki[wyniki["kierunek"].str.contains(szukany_kierunek, case=False, na=False)]
         
     if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2:
-        od_daty = pd.to_datetime(szukany_zakres)
-        do_daty = pd.to_datetime(szukany_zakres)
+        od_daty = pd.to_datetime(szukany_zakres[0])
+        do_daty = pd.to_datetime(szukany_zakres[1])
         wyniki["start_dt"] = pd.to_datetime(wyniki["start_date"])
         wyniki["koniec_dt"] = pd.to_datetime(wyniki["koniec_date"])
         wyniki = wyniki[(wyniki["start_dt"] <= do_daty) & (wyniki["koniec_dt"] >= od_daty)]
 
     st.divider()
     st.subheader(f"Dostępne oferty ({len(wyniki)})")
-    
     if wyniki.empty:
         st.info("Brak pasujących rotacji od innych pracowników.")
     else:
@@ -217,10 +196,8 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 if st.button(f"Zaproponuj wymianę", key=f"trade_{row['id']}", use_container_width=True):
                     st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {row['imie_nazwisko']} (`@{row['pracownik_nick'].upper()}`).")
 
-# --- ZAKŁADKA 2: DODAWANIE ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
-    
     with st.form("form_dodaj_rotacje"):
         nowy_kierunek = st.text_input("Kierunek docelowy (np. JFK, CDG):").strip().upper()
         col_start, col_end = st.columns(2)
@@ -228,10 +205,8 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             data_start = st.date_input("Start rotacji:", min_value=datetime.today())
         with col_end:
             data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
-            
-        w_zamian = st.text_area("Za co chcesz się wymienić? (np. za wolne, za lot do USA)")
+        w_zamian = st.text_area("Za co chcesz się wymienić?")
         submit = st.form_submit_button("Zapisz w bazie danych")
-        
         if submit:
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
@@ -240,3 +215,20 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.success("Rotacja została dodana do bazy!")
                 st.rerun()
             else:
+                st.error("Wypełnij wszystkie pola.")
+
+elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
+    if moje.empty:
+        st.info("Nie wystawiłeś/aś obecnie żadnych lotów na giełdę.")
+    else:
+        for idx, row in moje.iterrows():
+            with st.container():
+                st.write(f"✈️ **{row['kierunek'].upper()}** ({row['start_date']} do {row['koniec_date']})")
+                st.write(f"🔄 Oczekiwania: {row['w_zamian']}")
+                if st.button("Usuń to ogłoszenie", key=f"del_{row['id']}", use_container_width=True):
+                    usun_rotacje_db(row['id'], st.session_state.zalogowany_nick)
+                    st.success("Ogłoszenie usunięte z bazy.")
+                    st.rerun()
+                st.divider()
