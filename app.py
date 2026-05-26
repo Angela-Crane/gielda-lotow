@@ -42,18 +42,15 @@ def weryfikuj_logowanie(nick, haslo):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     hash_do_sprawdzenia = szyfruj_haslo(haslo)
-    try:
-        c.execute("SELECT imie_nazwisko FROM uzytkownicy WHERE nick = ? AND haslo_hash = ?", (nick.upper(), hash_do_sprawdzenia))
-        user = c.fetchone()
-    except sqlite3.OperationalError:
-        user = None
+    c.execute("SELECT imie_nazwisko FROM uzytkownicy WHERE UPPER(nick) = ? AND haslo_hash = ?", (nick.upper(), hash_do_sprawdzenia))
+    user = c.fetchone()
     conn.close()
     return user if user else None
 
 def sprawdz_czy_nick_zajety(nick):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT 1 FROM uzytkownicy WHERE nick = ?", (nick.upper(),))
+    c.execute("SELECT 1 FROM uzytkownicy WHERE UPPER(nick) = ?", (nick.upper(),))
     res = c.fetchone()
     conn.close()
     return res is not None
@@ -72,17 +69,14 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     conn.close()
     return sukces
 
-def pobierz_dane():
+def pobierz_wszystkie_rotacje():
     conn = sqlite3.connect(DB_FILE)
-    try:
-        query = '''
-            SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
-            FROM rotacje r
-            JOIN uzytkownicy u ON r.pracownik_nick = u.nick
-        '''
-        df = pd.read_sql_query(query, conn)
-    except Exception:
-        df = pd.DataFrame(columns=["id", "pracownik_nick", "imie_nazwisko", "start_date", "koniec_date", "kierunek", "w_zamian"])
+    query = '''
+        SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
+        FROM rotacje r
+        LEFT JOIN uzytkownicy u ON UPPER(r.pracownik_nick) = UPPER(u.nick)
+    '''
+    df = pd.read_sql_query(query, conn)
     conn.close()
     return df
 
@@ -99,15 +93,15 @@ def dodaj_rotacje_db(nick, start, koniec, kierunek, w_zamian):
 def usun_rotacje_db(id_rotacji, nick):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("DELETE FROM rotacje WHERE id = ? AND pracownik_nick = ?", (id_rotacji, nick.upper()))
+    c.execute("DELETE FROM rotacje WHERE id = ? AND UPPER(pracownik_nick) = ?", (id_rotacji, nick.upper()))
     conn.commit()
     conn.close()
 
 def usun_uzytkownika_z_bazy(nick_do_usuniecia):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("DELETE FROM rotacje WHERE pracownik_nick = ?", (nick_do_usuniecia.upper(),))
-    c.execute("DELETE FROM uzytkownicy WHERE nick = ?", (nick_do_usuniecia.upper(),))
+    c.execute("DELETE FROM rotacje WHERE UPPER(pracownik_nick) = ?", (nick_do_usuniecia.upper(),))
+    c.execute("DELETE FROM uzytkownicy WHERE UPPER(nick) = ?", (nick_do_usuniecia.upper(),))
     conn.commit()
     conn.close()
 
@@ -174,7 +168,6 @@ if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
     ZAKLADKI.append("🛠️ Panel Admina")
 
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
-baza_rotacji = pobierz_dane()
 
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
@@ -186,9 +179,9 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         filtruj_daty = st.checkbox("📅 Filtruj po zakresie dat")
         szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
 
-    wyniki = baza_rotacji.copy()
+    wyniki = pobierz_wszystkie_rotacje()
     if not wyniki.empty:
-        wyniki = wyniki[wyniki["pracownik_nick"] != st.session_state.zalogowany_nick]
+        wyniki = wyniki[wyniki["pracownik_nick"].str.upper() != st.session_state.zalogowany_nick.upper()]
     
     if szukany_kierunek and not wyniki.empty:
         wyniki = wyniki[wyniki["kierunek"].str.contains(szukany_kierunek, case=False, na=False)]
@@ -236,4 +229,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
-    swieza_baza = pobierz_dane()
+    wszystkie = pobierz_wszystkie_rotacje()
+    moje = wszystkie[wszystkie["pracownik_nick"].str.upper() == st.session_state.zalogowany_nick.upper()] if not wszystkie.empty else pd.DataFrame()
+    
+    if moje.empty:
