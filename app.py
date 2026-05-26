@@ -7,6 +7,9 @@ from datetime import datetime
 # Konfiguracja strony
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
+# ==================== KONFIGURACJA ADMINISTRATORA ====================
+NICK_ADMINA = "RUTKSA17"  # <-- WPISZ TUTAJ SWÓJ NICK (wielkimi literami)
+
 def szyfruj_haslo(haslo):
     return hashlib.sha256(str.encode(haslo)).hexdigest()
 
@@ -64,7 +67,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukces
+    return sukses
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -91,6 +94,18 @@ def usun_rotacje_db(id_rotacji, nick):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("DELETE FROM rotacje WHERE id = ? AND pracownik_nick = ?", (id_rotacji, nick.upper()))
+    conn.commit()
+    conn.close()
+
+# --- NOWE FUNKCJE ADMINISTRATORA ---
+def usun_uzytkownika_z_bazy(nick_do_usuniecia):
+    """Usuwa użytkownika oraz wszystkie jego wystawione loty."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # 1. Usuń loty użytkownika
+    c.execute("DELETE FROM rotacje WHERE pracownik_nick = ?", (nick_do_usuniecia.upper(),))
+    # 2. Usuń profil użytkownika
+    c.execute("DELETE FROM uzytkownicy WHERE nick = ?", (nick_do_usuniecia.upper(),))
     conn.commit()
     conn.close()
 
@@ -155,7 +170,11 @@ if st.sidebar.button("Wyloguj się"):
     st.session_state.zalogowany_imie = None
     st.rerun()
 
+# Dynamiczne generowanie menu w zależności od tego, czy zalogowany to admin
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
+if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
+    ZAKLADKI.append("🛠️ Panel Admina")
+
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
 
 baza_rotacji = pobierz_dane()
@@ -177,8 +196,8 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         wyniki = wyniki[wyniki["kierunek"].str.contains(szukany_kierunek, case=False, na=False)]
         
     if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2:
-        od_daty = pd.to_datetime(szukany_zakres[0])
-        do_daty = pd.to_datetime(szukany_zakres[1])
+        od_daty = pd.to_datetime(szukany_zakres)
+        do_daty = pd.to_datetime(szukany_zakres)
         wyniki["start_dt"] = pd.to_datetime(wyniki["start_date"])
         wyniki["koniec_dt"] = pd.to_datetime(wyniki["koniec_date"])
         wyniki = wyniki[(wyniki["start_dt"] <= do_daty) & (wyniki["koniec_dt"] >= od_daty)]
@@ -219,16 +238,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
-    moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
-    if moje.empty:
-        st.info("Nie wystawiłeś/aś obecnie żadnych lotów na giełdę.")
-    else:
-        for idx, row in moje.iterrows():
-            with st.container():
-                st.write(f"✈️ **{row['kierunek'].upper()}** ({row['start_date']} do {row['koniec_date']})")
-                st.write(f"🔄 Oczekiwania: {row['w_zamian']}")
-                if st.button("Usuń to ogłoszenie", key=f"del_{row['id']}", use_container_width=True):
-                    usun_rotacje_db(row['id'], st.session_state.zalogowany_nick)
-                    st.success("Ogłoszenie usunięte z bazy.")
-                    st.rerun()
-                st.divider()
