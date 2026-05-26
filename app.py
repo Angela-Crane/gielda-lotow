@@ -67,7 +67,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_wszystkie_rotacje():
     conn = sqlite3.connect(DB_FILE)
@@ -179,10 +179,17 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         filtruj_daty = st.checkbox("📅 Filtruj po zakresie dat")
         szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
 
-    wyniki = pobierz_wszystkie_rotacje()
-    if not wyniki.empty:
-        # Bezpieczne odfiltrowanie własnych lotów bez używania metod tekstowych bezpośrednio na obiektach None
-        wyniki = wyniki[wyniki["pracownik_nick"].fillna("").str.upper() != st.session_state.zalogowany_nick.upper()]
+    wszystkie_oferty = pobierz_wszystkie_rotacje()
+    
+    # Bezpieczne filtrowanie pętlą (całkowicie odporne na błędy)
+    wyniki_list = []
+    if not wszystkie_oferty.empty:
+        for idx, row in wszystkie_oferty.iterrows():
+            p_nick = str(row['pracownik_nick']).upper() if row['pracownik_nick'] else ""
+            if p_nick != st.session_state.zalogowany_nick.upper() and p_nick != "":
+                wyniki_list.append(row)
+                
+    wyniki = pd.DataFrame(wyniki_list) if wyniki_list else pd.DataFrame()
     
     if szukany_kierunek and not wyniki.empty:
         wyniki = wyniki[wyniki["kierunek"].fillna("").str.contains(szukany_kierunek, case=False, na=False)]
@@ -225,7 +232,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif nowy_kierunek and w_zamian:
-                dodaj_rotacje_db(st.session_state.zalogowany_nick, str(data_start), str(data_koniec), nowy_kierunek, w_zamian)
-                st.success("Rotacja została dodana do bazy!")
-                st.rerun()
-            else:
