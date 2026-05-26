@@ -1,6 +1,5 @@
 import streamlit as st
 import sqlite3
-import hashlib
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -57,7 +56,7 @@ def init_db():
 
 init_db()
 
-# ==================== OBSŁUGA TRWAŁEJ SESJI (Ciasteczka w przeglądarce) ====================
+# ==================== OBSŁUGA TRWAŁEJ SESJI ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
@@ -83,7 +82,7 @@ if st.session_state.user_nick is None:
             
             if user and user[1] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = user[0]
+                st.session_state.user_imie = user[0]  # POPRAWKA: pobranie czystego tekstu imienia
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
