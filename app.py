@@ -129,7 +129,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 
                 klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
                 
-                # --- ROZBUDOWANY FORMULARZ PROPOZYCJI W ZAMIAN ---
                 st.markdown("**Co oferujesz w zamian za ten lot?**")
                 p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{klucz_unikalny}").strip().upper()
                 
@@ -190,7 +189,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                zapisz_dane(OFERTY_FILE, ofertas_db)
+                zapisz_dane(OFERTY_FILE, oferty_db) # <-- NAPRAWIONA LINIJKA 193
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -219,3 +218,4 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
                 st.rerun()
             st.divider()
 
+# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
