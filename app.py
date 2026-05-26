@@ -199,17 +199,16 @@ elif view == "📋 Moje ogłoszenia":
 elif view == "📩 Otrzymane Propozycje":
     st.header("📩 Propozycje wymiany od załogi")
     
-    moje_p = []
-    for p in st.session_state.Baza_Propozycje:
+    # 1. Pobieramy unikalne indeksy propozycji z globalnej listy, aby usuwać bezpośrednio po kluczu systemowym
+    moje_p_indeksy = []
+    for idx, p in enumerate(st.session_state.Baza_Propozycje):
         if isinstance(p, dict) and p.get("wlasciciel_nick") == st.session_state.session_user:
-            moje_p.append(p)
+            moje_p_indeksy.append((idx, p))
     
-    if not moje_p:
+    if not moje_p_indeksy:
         st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
     else:
-        # Pętla wyświetlająca każdą propozycję jako elegancką rozwijaną kartę lotu
-        for idx, p in enumerate(moje_p):
+        for idx_globalny, p in moje_p_indeksy:
             kier_oferty = p.get('kierunek_oferty', 'BRAK')
             daty_oferty = p.get('daty_oferty', 'Nieznane daty')
             
-            with st.expander(f"📌 Oferta do lotu: {kier_oferty} ({daty_oferty})", expanded=False):
