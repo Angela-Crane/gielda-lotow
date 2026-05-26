@@ -1,5 +1,6 @@
 import streamlit as st
-import sqlite3
+import json
+import os
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -8,56 +9,33 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# Zmiana nazwy pliku na czystą wersję, aby zresetować uszkodzone rekordy testowe
-DB_FILE = "gielda_final.db"
+# Pliki tekstowe, które będą przechowywać dane na stałe na serwerze
+KONTA_FILE = "dane_konta.json"
+OFERTY_FILE = "dane_oferty.json"
+PROP_FILE = "dane_propozycje.json"
 
-# ==================== INICJALIZACJA STAŁEJ BAZY DANYCH ====================
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    # Tabela kont użytkowników
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS uzytkownicy (
-            nick TEXT PRIMARY KEY,
-            imie TEXT,
-            haslo TEXT
-        )
-    ''')
-    # Tabela ogłoszeń rotacji
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS oferty (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nick TEXT,
-            imie TEXT,
-            kierunek TEXT,
-            start TEXT,
-            koniec TEXT,
-            w_zamian TEXT
-        )
-    ''')
-    # Tabela propozycji wymiany
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS propozycje (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_oferty INTEGER,
-            kierunek_oferty TEXT,
-            daty_oferty TEXT,
-            wlasciciel_nick TEXT,
-            proponujacy_nick TEXT,
-            proponujacy_imie TEXT,
-            co_proponuje TEXT
-        )
-    ''')
-    # Automatyczne dodanie konta administratora, jeśli baza jest czysta
-    c.execute("SELECT 1 FROM uzytkownicy WHERE nick = 'RUTKSA17'")
-    if not c.fetchone():
-        c.execute("INSERT INTO uzytkownicy (nick, imie, haslo) VALUES ('RUTKSA17', 'ADMINISTRATOR', 'ADMIN123')")
-    conn.commit()
-    conn.close()
+# ==================== SYSTEM TRWAŁEGO ZAPISU (JSON) ====================
+def wczytaj_dane(sciezka, domyslne):
+    if not os.path.exists(sciezka):
+        with open(sciezka, 'w', encoding='utf-8') as f:
+            json.dump(domyslne, f, ensure_ascii=False, indent=4)
+        return domyslne
+    try:
+        with open(sciezka, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return domyslne
 
-init_db()
+def zapisz_dane(sciezka, dane):
+    with open(sciezka, 'w', encoding='utf-8') as f:
+        json.dump(dane, f, ensure_ascii=False, indent=4)
 
-# ==================== OBSŁUGA TRWAŁEJ SESJI ====================
+# Inicjalizacja baz tekstowych
+konta_db = wczytaj_dane(KONTA_FILE, {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}})
+oferty_db = wczytaj_dane(OFERTY_FILE, [])
+propozycje_db = wczytaj_dane(PROP_FILE, [])
+
+# ==================== SYSTEM WBUDOWANEJ SESJI ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
@@ -65,7 +43,7 @@ if 'user_imie' not in st.session_state:
 if 'nav_index' not in st.session_state:
     st.session_state.nav_index = 0
 
-# ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
+# ==================== PANEL LOGOWANIA / REJESTRACJI ====================
 if st.session_state.user_nick is None:
     st.title("✈️ Giełda Rotacji Lotniczych")
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
@@ -75,15 +53,9 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("SELECT imie, haslo FROM uzytkownicy WHERE nick = ?", (wpisany_nick,))
-            user = c.fetchone()
-            conn.close()
-            
-            if user and user[1] == wpisane_haslo:
+            if wpisany_nick in konta_db and konta_db[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(user[0])  # POPRAWKA: Pobranie czystego tekstu imienia bez formatu krotki!
+                st.session_state.user_imie = str(konta_db[wpisany_nick]["imie"])  # Czysty tekst imienia
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -99,24 +71,16 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
+            elif nowy_nick in konta_db:
+                st.error("Ten nick jest już zajęty!")
             else:
-                conn = sqlite3.connect(DB_FILE)
-                c = conn.cursor()
-                c.execute("SELECT 1 FROM uzytkownicy WHERE nick = ?", (nowy_nick,))
-                zajety = c.fetchone()
-                
-                if zajety:
-                    st.error("Ten nick jest już zajęty!")
-                    conn.close()
-                else:
-                    c.execute("INSERT INTO uzytkownicy (nick, imie, haslo) VALUES (?, ?, ?)", (nowy_nick, nowe_imie, nowe_haslo))
-                    conn.commit()
-                    conn.close()
-                    st.session_state.user_nick = nowy_nick
-                    st.session_state.user_imie = nowe_imie
-                    st.session_state.nav_index = 0
-                    st.success("Konto utworzone!")
-                    st.rerun()
+                konta_db[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
+                zapisz_dane(KONTA_FILE, konta_db)
+                st.session_state.user_nick = nowy_nick
+                st.session_state.user_imie = nowe_imie
+                st.session_state.nav_index = 0
+                st.success("Konto utworzone!")
+                st.rerun()
     st.stop()
 
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
@@ -146,13 +110,6 @@ wybrana_zakladka = st.sidebar.radio(
 )
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
-# Pobieranie aktualnych ofert
-conn = sqlite3.connect(DB_FILE)
-c = conn.cursor()
-c.execute("SELECT id, nick, imie, kierunek, start, koniec, w_zamian FROM oferty")
-wszystkie_oferty = [{"id": r[0], "nick": r[1], "imie": r[2], "kierunek": r[3], "start": r[4], "koniec": r[5], "w_zamian": r[6]} for r in c.fetchall()]
-conn.close()
-
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
@@ -160,7 +117,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for o in wszystkie_oferty:
+    for o in oferty_db:
         if o["nick"] != st.session_state.user_nick:
             if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
@@ -171,19 +128,22 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
                 st.write("---")
                 
-                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o['id']}", placeholder="Wpisz rejs lub daty...")
+                klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
+                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{klucz_unikalny}", placeholder="Wpisz rejs lub daty...")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{klucz_unikalny}", use_container_width=True):
                     if tekst_propozycji.strip():
-                        conn = sqlite3.connect(DB_FILE)
-                        c = conn.cursor()
-                        c.execute('''
-                            INSERT INTO propozycje (id_oferty, kierunek_oferty, daty_oferty, wlasciciel_nick, proponujacy_nick, proponujacy_imie, co_proponuje)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ''', (o['id'], o['kierunek'], f"{o['start']} do {o['koniec']}", o['nick'], st.session_state.user_nick, st.session_state.user_imie, tekst_propozycji.strip()))
-                        conn.commit()
-                        conn.close()
-                        st.success("Twój warunek wymiany został wysłany!")
+                        propozycje_db.append({
+                            "klucz_oferty": klucz_unikalny,
+                            "kierunek_oferty": o["kierunek"],
+                            "daty_oferty": f"{o['start']} do {o['koniec']}",
+                            "wlasciciel_nick": o["nick"],
+                            "proponujacy_nick": st.session_state.user_nick,
+                            "proponujacy_imie": st.session_state.user_imie,
+                            "co_proponuje": tekst_propozycji.strip()
+                        })
+                        zapisz_dane(PROP_FILE, propozycje_db)
+                        st.success("Twój warunek wymiany został pomyślnie wysłany!")
                         st.rerun()
                     else:
                         st.error("Wpisz najpierw, co oferujesz w zamian!")
@@ -206,14 +166,15 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
-                conn = sqlite3.connect(DB_FILE)
-                c = conn.cursor()
-                c.execute('''
-                    INSERT INTO oferty (nick, imie, kierunek, start, koniec, w_zamian)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (st.session_state.user_nick, st.session_state.user_imie, kierunek, str(data_start), str(data_koniec), w_zamian))
-                conn.commit()
-                conn.close()
+                oferty_db.append({
+                    "nick": st.session_state.user_nick,
+                    "imie": st.session_state.user_imie,
+                    "kierunek": kierunek,
+                    "start": str(data_start),
+                    "koniec": str(data_koniec),
+                    "w_zamian": w_zamian
+                })
+                zapisz_dane(OFERTY_FILE, oferty_db)
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -223,7 +184,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     
-    moje_loty = [o for o in wszystkie_oferty if o["nick"] == st.session_state.user_nick]
+    moje_loty = [o for o in oferty_db if o["nick"] == st.session_state.user_nick]
     
     if not moje_loty:
         st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
@@ -232,5 +193,31 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
             
-            if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
-                conn = sqlite3.connect(DB_FILE)
+            klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
+            if st.button("Usuń ogłoszenie", key=f"del_{klucz_unikalny}", use_container_width=True):
+                oferty_db.remove(o)
+                zapisz_dane(OFERTY_FILE, oferty_db)
+                # Czyszczenie powiązanych propozycji
+                propozycje_db = [p for p in propozycje_db if p["klucz_oferty"] != klucz_unikalny]
+                zapisz_dane(PROP_FILE, propozycje_db)
+                st.success("Ogłoszenie usunięte!")
+                st.rerun()
+            st.divider()
+
+# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
+elif wybrana_zakladka == "📩 Otrzymane Propozycje":
+    st.header("📩 Propozycje wymiany od załogi")
+    
+    moje_propozycje = [p for p in propozycje_db if p["wlasciciel_nick"] == st.session_state.user_nick]
+    
+    if not moje_propozycje:
+        st.info("Nie otrzymałeś jeszcze żadnych konkretnych propozycji wymiany.")
+    else:
+        for p in moje_propozycje:
+            with st.container():
+                st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
+                st.info(f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) oferuje w zamian:\n\n**{p['co_proponuje']}**")
+                
+                if st.button("Odrzuć tę propozycję", key=f"Reject_{p['klucz_oferty']}_{p['proponujacy_nick']}", use_container_width=True):
+                    propozycje_db.remove(p)
+                    zapisz_dane(PROP_FILE, propozycje_db)
