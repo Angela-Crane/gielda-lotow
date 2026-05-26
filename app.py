@@ -18,12 +18,8 @@ DB_FILE = "baza_lotow.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    
-    # 1. Usuwamy stare, wadliwe tabele (jeśli istnieją), aby baza założyła się całkowicie na czysto i poprawnie
     c.execute("DROP TABLE IF EXISTS rotacje")
     c.execute("DROP TABLE IF EXISTS uzytkownicy")
-    
-    # 2. Tworzymy tabele z właściwą, nową strukturą od zera
     c.execute('''
         CREATE TABLE IF NOT EXISTS rotacje (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,7 +113,6 @@ def usun_uzytkownika_z_bazy(nick_do_usuniecia):
     conn.commit()
     conn.close()
 
-# Inicjalizacja bazy
 init_db()
 
 if 'zalogowany_nick' not in st.session_state:
@@ -141,12 +136,12 @@ if st.session_state.zalogowany_nick is None:
                     st.success(f"Witaj, {imie_uzytkownika}!")
                     st.rerun()
                 else:
-                    st.error("Nieprawidłowy nick lub hasło osobiste! (Pamiętaj, że musisz najpierw utworzyć konto w zakładce obok)")
+                    st.error("Nieprawidłowy nick lub hasło osobiste!")
             else:
                 st.warning("Uzupełnij oba pola logowania.")
                 
     with zakladka_rejestracja:
-        nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Możesz wpisać małymi literami - system automatycznie zamieni je na drukowane.", key="reg_nick").strip().upper()
+        nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="System automatycznie zamieni litery na duże.", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
         if st.button("Stwórz konto", use_container_width=True):
@@ -235,3 +230,9 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif nowy_kierunek and w_zamian:
+                dodaj_rotacje_db(st.session_state.zalogowany_nick, str(data_start), str(data_koniec), nowy_kierunek, w_zamian)
+                st.success("Rotacja została dodana do bazy!")
+                st.rerun()
+            else:
+                st.error("Wypełnij wszystkie pola.")
+
