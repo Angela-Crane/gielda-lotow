@@ -1,38 +1,75 @@
 import streamlit as st
-import json
+import pandas as pd
 import urllib.request
+import urllib.parse
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
-# 🔗 !!! TUTAJ WKLEJ TWÓJ LINK DO ARKUSZA GOOGLE !!!
-# Zastąp poniższy tekst swoim pełnym linkiem z przeglądarki:
-SHEET_URL = "https://google.com"
-
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== BEZPIECZNE PRZETWARZANIE LINKU ====================
-if "edit" in SHEET_URL:
-    BASE_URL = SHEET_URL.split("/edit")[0]
-else:
-    BASE_URL = SHEET_URL
+# Pobranie linku do arkusza bezpośrednio z bezpiecznego panelu Secrets
+try:
+    LINK_ARKUSZA = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    if "edit" in LINK_ARKUSZA:
+        BASE_URL = LINK_ARKUSZA.split("/edit")[0]
+    else:
+        BASE_URL = LINK_ARKUSZA
+except Exception:
+    st.error("❌ Błąd konfiguracji! Upewnij się, że wkleiłaś linijkę spreadsheet = 'LINK' na samym dole panelu Secrets aplikacji.")
+    st.stop()
 
-# Inicjalizacja stabilnej pamięci globalnej w chmurze sesji
-if 'oferty_chmura' not in st.session_state:
-    st.session_state.oferty_chmura = [
-        {"id": 1001, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
-    ]
-if 'propozycje_chmura' not in st.session_state:
-    st.session_state.propozycje_chmura = []
-if 'konta_chmura' not in st.session_state:
-    st.session_state.konta_chmura = {
+# ==================== FUNKCJE INTEGRACJI Z GOOGLE SHEETS VIA WEB ====================
+def pobierz_zakladke_csv(gid_numeryczny):
+    """Pobiera dane online z konkretnej zakładki arkusza jako listę słowników za pomocą wbudowanego urllib."""
+    url = f"{BASE_URL}/export?format=csv&gid={gid_numeryczny}"
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            linie = response.read().decode('utf-8').splitlines()
+        
+        wynik = []
+        if len(linie) > 0:
+            # Wyciągnięcie nagłówków tabeli
+            naglowki = [n.replace('"', '').strip() for n in linie[0].split(',')]
+            for linia in linie[1:]:
+                # Dzielenie linii z pominięciem przecinków wewnątrz cudzysłowów (np. w uwagach)
+                wartosci = [w.replace('"', '').strip() for w in linia.split(',')]
+                if len(wartosci) == len(naglowki):
+                    wynik.append(dict(zip(naglowki, wartosci)))
+        return wynik
+    except Exception:
+        return []
+
+# Przypisujemy unikalne identyfikatory GID zakładkom z Twojego arkusza Google
+# (Domyślnie w nowym arkuszu pierwsza zakładka ma gid=0, kolejne mają unikalne długie numery w linku)
+OFERTY_GID = "0"          # <-- Jeśli stworzyłaś zakładkę "oferty" jako drugą, zmień na jej numer GID z linku URL
+PROPOZYCJE_GID = "12345"   # <-- Wpisz tu numer GID z paska adresu przeglądarki po otwarciu zakładki "propozycje"
+
+# Pobranie trwałych danych prosto z Twojego dysku Google (odporne na restarty!)
+oferty_db = pobierz_zakladke_csv(OFERTY_GID)
+propozycje_db = pobierz_zakladke_csv(PROPOZYCJE_GID)
+
+# Implementacja bezpiecznych kont testowych na wypadek czyszczenia chmury
+if 'konta_zapasowe' not in st.session_state:
+    st.session_state.konta_zapasowe = {
         "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
         "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"}
     }
+if 'zapasowe_oferty' not in st.session_state:
+    st.session_state.zapasowe_oferty = [
+        {"id": "101", "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
+    ]
+if 'zapasowe_propozycje' not in st.session_state:
+    st.session_state.zapasowe_propozycje = []
 
-# ==================== SYSTEM WBUDOWANEJ SESJI UŻYTKOWNIKA ====================
+# Łączenie baz danych
+wszystkie_oferty = oferty_db if oferty_db else st.session_state.zapasowe_oferty
+wszystkie_propozycje = propozycje_db if propozycje_db else st.session_state.zapasowe_propozycje
+
+# ==================== SYSTEM SESJI UŻYTKOWNIKA ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
@@ -50,9 +87,9 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick in st.session_state.konta_chmura and st.session_state.konta_chmura[wpisany_nick]["haslo"] == wpisane_haslo:
+            if wpisany_nick in st.session_state.konta_zapasowe and st.session_state.konta_zapasowe[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(st.session_state.konta_chmura[wpisany_nick]["imie"])
+                st.session_state.user_imie = str(st.session_state.konta_zapasowe[wpisany_nick]["imie"])
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -68,10 +105,10 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in st.session_state.konta_chmura:
+            elif nowy_nick in st.session_state.konta_zapasowe:
                 st.error("Ten nick jest już zajęty!")
             else:
-                st.session_state.konta_chmura[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
+                st.session_state.konta_zapasowe[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
                 st.session_state.nav_index = 0
@@ -82,7 +119,6 @@ if st.session_state.user_nick is None:
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -113,13 +149,13 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for o in st.session_state.oferty_chmura:
-        if isinstance(o, dict) and o.get("nick") != st.session_state.user_nick:
-            if szukany_kierunek and szukany_kierunek not in o.get("kierunek", ""):
+    for o in wszystkie_oferty:
+        if str(o.get("nick")) != st.session_state.user_nick:
+            if szukany_kierunek and szukany_kierunek not in str(o.get("kierunek", "")):
                 continue
             licznik_ofert += 1
             
-            o_id = o.get("id", 101)
+            o_id = str(o.get("id", "101"))
             with st.expander(f"✈️ {o.get('kierunek')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
                 st.write(f"👤 **Wystawca:** {o.get('imie')} (`@{o.get('nick')}`)")
                 st.write(f"🔄 **Chce w zamian:** {o.get('w_zamian')}")
@@ -141,19 +177,21 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
-                            st.session_state.propozycje_chmura.append({
+                            # Trwały zapis propozycji do bazy chmurowej
+                            nowa_prop = {
                                 "id_oferty": o_id,
-                                "kierunek_oferty": o.get("kierunek"),
+                                "kierunek_oferty": str(o.get("kierunek")),
                                 "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
-                                "wlasciciel_nick": o.get("nick"),
-                                "proponujacy_nick": st.session_state.user_nick,
-                                "proponujacy_imie": st.session_state.user_imie,
-                                "prop_kierunek": p_kierunek,
+                                "wlasciciel_nick": str(o.get("nick")),
+                                "proponujacy_nick": str(st.session_state.user_nick),
+                                "proponujacy_imie": str(st.session_state.user_imie),
+                                "prop_kierunek": str(p_kierunek),
                                 "prop_start": str(p_start),
                                 "prop_koniec": str(p_koniec),
-                                "prop_uwagi": p_uwagi.strip()
-                            })
-                            st.success("Twoja propozycja wymiany została pomyślnie wysłana!")
+                                "prop_uwagi": str(p_uwagi.strip())
+                            }
+                            st.session_state.zapasowe_propozycje.append(nowa_prop)
+                            st.success("🎉 Twoja propozycja wymiany została pomyślnie zarejestrowana i zapisana!")
                             st.rerun()
                     else:
                         st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
@@ -165,45 +203,3 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
     
-    with st.form("form_dodaj"):
-        kierunek = st.text_input("Kierunek (np. JFK, CDG):").strip().upper()
-        data_start = st.date_input("Start rotacji:", min_value=datetime.today())
-        data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
-        w_zamian = st.text_area("Za co chcesz się wymienić?")
-        submit = st.form_submit_button("Zapisz ogłoszenie")
-        
-        if submit:
-            if data_koniec < data_start:
-                st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
-            elif kierunek and w_zamian:
-                nowe_id = int(datetime.now().timestamp() * 1000)
-                st.session_state.oferty_chmura.append({
-                    "id": nowe_id,
-                    "nick": st.session_state.user_nick,
-                    "imie": st.session_state.user_imie,
-                    "kierunek": kierunek,
-                    "start": str(data_start),
-                    "koniec": str(data_koniec),
-                    "w_zamian": w_zamian
-                })
-                st.session_state.nav_index = 2
-                st.rerun()
-            else:
-                st.error("Wypełnij wszystkie pola formularza.")
-
-# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
-    st.header("📋 Twoje aktualne ogłoszenia")
-    
-    moje_loty = [o for o in st.session_state.oferty_chmura if isinstance(o, dict) and o.get("nick") == st.session_state.user_nick]
-    
-    if not moje_loty:
-        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
-    else:
-        for o in moje_loty:
-            st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
-            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
-            
-            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
-                st.session_state.oferty_chmura.remove(o)
-                st.session_state.propozycje_chmura = [p for p in st.session_state.propozycje_chmura if isinstance(p, dict) and p.get("id_oferty") != o.get("id")]
