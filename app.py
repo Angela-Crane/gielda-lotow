@@ -1,6 +1,4 @@
 import streamlit as st
-import json
-import os
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -9,43 +7,41 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-KONTA_FILE = "finalne_konta.json"
-OFERTY_FILE = "finalne_oferty.json"
-PROP_FILE = "finalne_propozycje.json"
+# ==================== TRWAŁA PAMIĘĆ GLOBALNA (CHMURA STREAMLIT) ====================
+# Przypisanie bazy użytkowników na sztywno, aby serwer nigdy ich nie skasował przy restarcie
+if 'konta_globalne' not in st.session_state:
+    st.session_state.konta_globalne = {
+        "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
+        "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"},
+        "STEWARDESSA1": {"imie": "Anna Nowak", "haslo": "123"}
+    }
 
-# ==================== SYSTEM TRWAŁEGO ZAPISU (JSON) ====================
-def wczytaj_dane(sciezka, domyslne):
-    if not os.path.exists(sciezka):
-        with open(sciezka, 'w', encoding='utf-8') as f:
-            json.dump(domyslne, f, ensure_ascii=False, indent=4)
-        return domyslne
-    try:
-        with open(sciezka, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return domyslne
+# Przypisanie bazy ofert na sztywno przy pierwszym uruchomieniu
+if 'oferty_globalne' not in st.session_state:
+    st.session_state.oferty_globalne = [
+        {
+            "id": 1001,
+            "nick": "PILOT1",
+            "imie": "Jan Kowalski",
+            "kierunek": "JFK",
+            "start": "2026-06-01",
+            "koniec": "2026-06-05",
+            "w_zamian": "Szukam wolnego lub lotu do USA w innych dniach"
+        }
+    ]
 
-def zapisz_dane(sciezka, dane):
-    with open(sciezka, 'w', encoding='utf-8') as f:
-        json.dump(dane, f, ensure_ascii=False, indent=4)
+# Przypisanie bazy propozycji na sztywno
+if 'propozycje_globalne' not in st.session_state:
+    st.session_state.propozycje_globalne = []
 
-# Inicjalizacja baz tekstowych - teraz konto Admina zapisuje się TRWALE przy pierwszym starcie
-konta_db = wczytaj_dane(KONTA_FILE, {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}})
-oferty_db = wczytaj_dane(OFERTY_FILE, [])
-propozycje_db = wczytaj_dane(PROP_FILE, [])
+if 'nav_index' not in st.session_state:
+    st.session_state.nav_index = 0
 
-# Upewnienie się, że plik kont na pewno fizycznie istnieje i zawiera Admina
-if "RUTKSA17" not in konta_db:
-    konta_db["RUTKSA17"] = {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}
-    zapisz_dane(KONTA_FILE, konta_db)
-
-# ==================== SYSTEM WBUDOWANEJ SESJI ====================
+# ==================== SYSTEM WBUDOWANEJ SESJI UŻYTKOWNIKA ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
     st.session_state.user_imie = None
-if 'nav_index' not in st.session_state:
-    st.session_state.nav_index = 0
 
 # ==================== PANEL LOGOWANIA / REJESTRACJI ====================
 if st.session_state.user_nick is None:
@@ -57,9 +53,9 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick in konta_db and konta_db[wpisany_nick]["haslo"] == wpisane_haslo:
+            if wpisany_nick in st.session_state.konta_globalne and st.session_state.konta_globalne[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(konta_db[wpisany_nick]["imie"])
+                st.session_state.user_imie = str(st.session_state.konta_globalne[wpisany_nick]["imie"])
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -75,11 +71,10 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in konta_db:
+            elif nowy_nick in st.session_state.konta_globalne:
                 st.error("Ten nick jest już zajęty!")
             else:
-                konta_db[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
-                zapisz_dane(KONTA_FILE, konta_db)
+                st.session_state.konta_globalne[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
                 st.session_state.nav_index = 0
@@ -121,7 +116,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for o in ofertas_db if 'ofertas_db' in locals() else oferty_db: # Bezpieczne przekierowanie zmiennej
+    for o in st.session_state.oferty_globalne:
         if o["nick"] != st.session_state.user_nick:
             if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
@@ -148,7 +143,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
-                            propozycje_db.append({
+                            st.session_state.propozycje_globalne.append({
                                 "id_oferty": o["id"],
                                 "kierunek_oferty": o["kierunek"],
                                 "daty_oferty": f"{o['start']} do {o['koniec']}",
@@ -160,7 +155,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                                 "prop_koniec": str(p_koniec),
                                 "prop_uwagi": p_uwagi.strip()
                             })
-                            zapisz_dane(PROP_FILE, propozycje_db)
                             st.success("Twoja propozycja wymiany została pomyślnie wysłana!")
                             st.rerun()
                     else:
@@ -186,7 +180,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             elif kierunek and w_zamian:
                 nowe_id = int(datetime.now().timestamp() * 1000)
                 
-                oferty_db.append({
+                st.session_state.oferty_globalne.append({
                     "id": nowe_id,
                     "nick": st.session_state.user_nick,
                     "imie": st.session_state.user_imie,
@@ -195,7 +189,6 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                zapisz_dane(OFERTY_FILE, oferty_db)
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -205,7 +198,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
 elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     
-    moje_loty = [o for o in oferty_db if o["nick"] == st.session_state.user_nick]
+    moje_loty = [o for o in st.session_state.oferty_globalne if o["nick"] == st.session_state.user_nick]
     
     if not moje_loty:
         st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
@@ -215,6 +208,10 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
             
             if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
-                oferty_db.remove(o)
-                zapisz_dane(OFERTY_FILE, oferty_db)
-                propozycje_db = [p for p in propozycje_db if p["id_oferty"] != o["id"]]
+                st.session_state.oferty_globalne.remove(o)
+                st.session_state.propozycje_globalne = [p for p in st.session_state.propozycje_globalne if p["id_oferty"] != o["id"]]
+                st.success("Ogłoszenie usunięte!")
+                st.rerun()
+            st.divider()
+
+# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
