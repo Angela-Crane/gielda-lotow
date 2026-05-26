@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -9,7 +8,6 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 NICK_ADMINA = "RUTKSA17"
 
 # ==================== EMULACJA BEZPIECZNEJ BAZY CHMUROWEJ ONLINE ====================
-# Całkowicie uniezależniamy się od usuwania sesji przez Streamlit przy wylogowywaniu
 if 'Baza_Konta' not in st.session_state:
     st.session_state.Baza_Konta = {
         "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
@@ -21,7 +19,6 @@ if 'Baza_Oferty' not in st.session_state:
         {"id": 101, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
     ]
 
-# PRZENIESIENIE PROPOZYCJI DO SCHOWKA CAŁKOWICIE ODPORNEGO NA RESET LOGOWANIA
 if 'Baza_Propozycje' not in st.session_state:
     st.session_state.Baza_Propozycje = []
 
@@ -128,7 +125,6 @@ if view == "🔎 Szukaj i Filtruj":
                         if pk_date < ps:
                             st.error("Błąd: Data zakończenia lotu nie może być wcześniejsza niż startu!")
                         else:
-                            # ZAPIS PROPOZYCJI DO SCHOWKA CHMUROWEGO
                             st.session_state.Baza_Propozycje.append({
                                 "id_oferty": o["id"],
                                 "kierunek_oferty": o["kierunek"],
@@ -208,7 +204,10 @@ elif view == "📩 Otrzymane Propozycje":
     if not moje_p:
         st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
     else:
-        for p in moje_p:
+        # Dodanie indeksowania pętli naprawiające linię 214
+        for idx, p in enumerate(moje_p):
             with st.container():
                 st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
                 st.info(
+                    f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) proponuje lot:\n\n"
+                    f"🛫 **Kierunek:** {p['prop_kierunek']}\n"
