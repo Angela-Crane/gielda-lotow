@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
 import hashlib
 from datetime import datetime
@@ -67,18 +66,33 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukces
+    return sukses
 
 def pobierz_wszystkie_rotacje():
+    """Pobiera rotacje bezpośrednio jako standardową listę słowników Pythona."""
     conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
     query = '''
         SELECT r.id, r.pracownik_nick, u.imie_nazwisko, r.start_date, r.koniec_date, r.kierunek, r.w_zamian 
         FROM rotacje r
         LEFT JOIN uzytkownicy u ON UPPER(r.pracownik_nick) = UPPER(u.nick)
     '''
-    df = pd.read_sql_query(query, conn)
+    c.execute(query)
+    rekordy = c.fetchall()
     conn.close()
-    return df
+    
+    lista_rotacji = []
+    for r in rekordy:
+        lista_rotacji.append({
+            "id": r[0],
+            "pracownik_nick": r[1] if r[1] else "",
+            "imie_nazwisko": r[2] if r[2] else "Nieznany",
+            "start_date": r[3] if r[3] else "",
+            "koniec_date": r[4] if r[4] else "",
+            "kierunek": r[5] if r[5] else "",
+            "w_zamian": r[6] if r[6] else ""
+        })
+    return lista_rotacji
 
 def dodaj_rotacje_db(nick, start, koniec, kierunek, w_zamian):
     conn = sqlite3.connect(DB_FILE)
@@ -168,7 +182,9 @@ if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
     ZAKLADKI.append("🛠️ Panel Admina")
 
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
+wszystkie_rotacje = pobierz_wszystkie_rotacje()
 
+# --- ZAKŁADKA 1: FILTROWANIE ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
     st.subheader("Filtry wyszukiwania")
@@ -179,44 +195,37 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         filtruj_daty = st.checkbox("📅 Filtruj po zakresie dat")
         szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
 
-    wszystkie_oferty = pobierz_wszystkie_rotacje()
-    
-    # Bezpieczne filtrowanie pętlą (całkowicie odporne na błędy)
-    wyniki_list = []
-    if not wszystkie_oferty.empty:
-        for idx, row in wszystkie_oferty.iterrows():
-            p_nick = str(row['pracownik_nick']).upper() if row['pracownik_nick'] else ""
-            if p_nick != st.session_state.zalogowany_nick.upper() and p_nick != "":
-                wyniki_list.append(row)
-                
-    wyniki = pd.DataFrame(wyniki_list) if wyniki_list else pd.DataFrame()
-    
-    if szukany_kierunek and not wyniki.empty:
-        wyniki = wyniki[wyniki["kierunek"].fillna("").str.contains(szukany_kierunek, case=False, na=False)]
-        
-    if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2 and not wyniki.empty:
-        od_daty = pd.to_datetime(szukany_zakres)
-        do_daty = pd.to_datetime(szukany_zakres)
-        wyniki["start_dt"] = pd.to_datetime(wyniki["start_date"])
-        wyniki["koniec_dt"] = pd.to_datetime(wyniki["koniec_date"])
-        wyniki = wyniki[(wyniki["start_dt"] <= do_daty) & (wyniki["koniec_dt"] >= od_daty)]
+    # Bezpieczne wyciąganie ofert innych użytkowników
+    wyniki = []
+    for r in wszystkie_rotacje:
+        if r["pracownik_nick"].upper() != st.session_state.zalogowany_nick.upper():
+            # Filtrowanie po kierunku
+            if szukany_kierunek and szukany_kierunek not in r["kierunek"].upper():
+                continue
+            # Filtrowanie po dacie
+            if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2:
+                od_daty = szukany_zakres[0]
+                do_daty = szukany_zakres[1]
+                r_start = datetime.strptime(r["start_date"], "%Y-%m-%d").date()
+                r_koniec = datetime.strptime(r["koniec_date"], "%Y-%m-%d").date()
+                if not (r_start <= do_daty and r_koniec >= od_daty):
+                    continue
+            wyniki.append(r)
 
     st.divider()
     st.subheader(f"Dostępne oferty ({len(wyniki)})")
-    if wyniki.empty:
+    if not wyniki:
         st.info("Brak pasujących rotacji od innych pracowników.")
     else:
-        for idx, row in wyniki.iterrows():
-            kierunek_wyswietl = str(row['kierunek']).upper() if row['kierunek'] else "BRAK"
-            naglowek = f"✈️ {kierunek_wyswietl} | 📅 {row['start_date']} do {row['koniec_date']}"
+        for r in wyniki:
+            naglowek = f"✈️ {r['kierunek'].upper()} | 📅 {r['start_date']} do {r['koniec_date']}"
             with st.expander(naglowek, expanded=True):
-                wystawiajacy_nazwa = row['imie_nazwisko'] if row['imie_nazwisko'] else "Nieznany"
-                wystawiajacy_nick = str(row['pracownik_nick']).upper() if row['pracownik_nick'] else "BRAK"
-                st.write(f"👤 **Wystawiający:** {wystawiajacy_nazwa} (`@{wystawiajacy_nick}`)")
-                st.warning(f"🔄 **Warunki wymiany:** {row['w_zamian']}")
-                if st.button(f"Zaproponuj wymianę", key=f"trade_{row['id']}", use_container_width=True):
-                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {wystawiajacy_nazwa} (`@{wystawiajacy_nick}`).")
+                st.write(f"👤 **Wystawiający:** {r['imie_nazwisko']} (`@{r['pracownik_nick'].upper()}`)")
+                st.warning(f"🔄 **Warunki wymiany:** {r['w_zamian']}")
+                if st.button(f"Zaproponuj wymianę", key=f"trade_{r['id']}", use_container_width=True):
+                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {r['imie_nazwisko']} (`@{r['pracownik_nick'].upper()}`).")
 
+# --- ZAKŁADKA 2: DODAWANIE ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
     with st.form("form_dodaj_rotacje"):
@@ -231,4 +240,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
         if submit:
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
-            elif nowy_kierunek and w_zamian:
