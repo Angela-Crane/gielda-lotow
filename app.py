@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import urllib.request
-import urllib.parse
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -10,21 +9,17 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# Pobranie linku do arkusza bezpośrednio z bezpiecznego panelu Secrets
+# Bezpośredni link pobierania z Twojego Secrets
 try:
-    LINK_ARKUSZA = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    if "edit" in LINK_ARKUSZA:
-        BASE_URL = LINK_ARKUSZA.split("/edit")[0]
-    else:
-        BASE_URL = LINK_ARKUSZA
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    BASE_URL = SHEET_URL.split("/edit")[0] if "edit" in SHEET_URL else SHEET_URL
 except Exception:
-    st.error("❌ Błąd konfiguracji! Upewnij się, że wkleiłaś linijkę spreadsheet = 'LINK' na samym dole panelu Secrets aplikacji.")
+    st.error("❌ Brak konfiguracji! Upewnij się, że poprawnie zapisałaś link w panelu Secrets.")
     st.stop()
 
-# ==================== FUNKCJE INTEGRACJI Z GOOGLE SHEETS VIA WEB ====================
-def pobierz_zakladke_csv(gid_numeryczny):
-    """Pobiera dane online z konkretnej zakładki arkusza jako listę słowników za pomocą wbudowanego urllib."""
-    url = f"{BASE_URL}/export?format=csv&gid={gid_numeryczny}"
+def pobierz_dane_z_chmury(gid_zakladki):
+    """Pobiera dane online bezpośrednio z Twojego arkusza Google."""
+    url = f"{BASE_URL}/export?format=csv&gid={gid_zakladki}"
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=5) as response:
@@ -32,10 +27,8 @@ def pobierz_zakladke_csv(gid_numeryczny):
         
         wynik = []
         if len(linie) > 0:
-            # Wyciągnięcie nagłówków tabeli
             naglowki = [n.replace('"', '').strip() for n in linie[0].split(',')]
             for linia in linie[1:]:
-                # Dzielenie linii z pominięciem przecinków wewnątrz cudzysłowów (np. w uwagach)
                 wartosci = [w.replace('"', '').strip() for w in linia.split(',')]
                 if len(wartosci) == len(naglowki):
                     wynik.append(dict(zip(naglowki, wartosci)))
@@ -43,31 +36,30 @@ def pobierz_zakladke_csv(gid_numeryczny):
     except Exception:
         return []
 
-# Przypisujemy unikalne identyfikatory GID zakładkom z Twojego arkusza Google
-# (Domyślnie w nowym arkuszu pierwsza zakładka ma gid=0, kolejne mają unikalne długie numery w linku)
-OFERTY_GID = "0"          # <-- Jeśli stworzyłaś zakładkę "oferty" jako drugą, zmień na jej numer GID z linku URL
-PROPOZYCJE_GID = "12345"   # <-- Wpisz tu numer GID z paska adresu przeglądarki po otwarciu zakładki "propozycje"
+# Dynamiczne pobieranie ID zakładek z adresu URL w przeglądarce
+OFERTY_GID = "0"          # Pierwsza zakładka Twojego arkusza
+PROPOZYCJE_GID = "371196582" # Druga zakładka (wartość z Twojego okna Secrets!)
 
-# Pobranie trwałych danych prosto z Twojego dysku Google (odporne na restarty!)
-oferty_db = pobierz_zakladke_csv(OFERTY_GID)
-propozycje_db = pobierz_zakladke_csv(PROPOZYCJE_GID)
+# Pobranie trwałych danych z dysku Google
+oferty_db = pobierz_dane_z_chmury(OFERTY_GID)
+propozycje_db = pobierz_dane_z_chmury(PROPOZYCJE_GID)
 
-# Implementacja bezpiecznych kont testowych na wypadek czyszczenia chmury
-if 'konta_zapasowe' not in st.session_state:
-    st.session_state.konta_zapasowe = {
+# Lokalne bazy zapasowe, gdy chmura jest pusta
+if 'konta_zapas' not in st.session_state:
+    st.session_state.konta_zapas = {
         "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
         "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"}
     }
-if 'zapasowe_oferty' not in st.session_state:
-    st.session_state.zapasowe_oferty = [
+if 'oferty_zapas' not in st.session_state:
+    st.session_state.oferty_zapas = [
         {"id": "101", "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
     ]
-if 'zapasowe_propozycje' not in st.session_state:
-    st.session_state.zapasowe_propozycje = []
+if 'propozycje_zapas' not in st.session_state:
+    st.session_state.propozycje_zapas = []
 
-# Łączenie baz danych
-wszystkie_oferty = oferty_db if oferty_db else st.session_state.zapasowe_oferty
-wszystkie_propozycje = propozycje_db if propozycje_db else st.session_state.zapasowe_propozycje
+# Łączenie i synchronizacja
+wszystkie_oferty = oferty_db if oferty_db else st.session_state.oferty_zapas
+wszystkie_propozycje = propozycje_db if propozycje_db else st.session_state.propozycje_zapas
 
 # ==================== SYSTEM SESJI UŻYTKOWNIKA ====================
 if 'user_nick' not in st.session_state:
@@ -87,9 +79,9 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            if wpisany_nick in st.session_state.konta_zapasowe and st.session_state.konta_zapasowe[wpisany_nick]["haslo"] == wpisane_haslo:
+            if wpisany_nick in st.session_state.konta_zapas and st.session_state.konta_zapas[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(st.session_state.konta_zapasowe[wpisany_nick]["imie"])
+                st.session_state.user_imie = str(st.session_state.konta_zapas[wpisany_nick]["imie"])
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -105,10 +97,10 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in st.session_state.konta_zapasowe:
+            elif nowy_nick in st.session_state.konta_zapas:
                 st.error("Ten nick jest już zajęty!")
             else:
-                st.session_state.konta_zapasowe[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
+                st.session_state.konta_zapas[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
                 st.session_state.nav_index = 0
@@ -117,8 +109,6 @@ if st.session_state.user_nick is None:
     st.stop()
 
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
-st.title("✈️ Giełda Rotacji Lotniczych")
-
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -134,26 +124,18 @@ if st.session_state.user_nick == NICK_ADMINA:
 if st.session_state.nav_index >= len(ZAKLADKI):
     st.session_state.nav_index = 0
 
-wybrana_zakladka = st.sidebar.radio(
-    "Nawigacja", 
-    ZAKLADKI, 
-    index=st.session_state.nav_index, 
-    key=f"navigation_radio_{st.session_state.nav_index}"
-)
+wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI, index=st.session_state.nav_index, key=f"nav_radio_{st.session_state.nav_index}")
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.header("🔎 Znajdź rotację na wymianę")
-    szukany_kierunek = st.text_input("🛫 Wpisz kierunek docelowy (np. JFK):").strip().upper()
-    st.write("---")
+    szukany_kierunek = st.text_input("Wpisz kierunek docelowy (np. JFK):").strip().upper()
     
-    licznik_ofert = 0
     for o in wszystkie_oferty:
-        if str(o.get("nick")) != st.session_state.user_nick:
+        if str(o.get("nick")).upper() != st.session_state.user_nick.upper():
             if szukany_kierunek and szukany_kierunek not in str(o.get("kierunek", "")):
                 continue
-            licznik_ofert += 1
             
             o_id = str(o.get("id", "101"))
             with st.expander(f"✈️ {o.get('kierunek')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
@@ -169,37 +151,53 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                     p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{o_id}")
                 with col2:
                     p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{o_id}")
-                    
-                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o_id}", placeholder="np. Szukam wolnego...")
+                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o_id}")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
+                if st.button("Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
                     if p_kierunek:
-                        if p_koniec < p_start:
-                            st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
-                        else:
-                            # Trwały zapis propozycji do bazy chmurowej
-                            nowa_prop = {
-                                "id_oferty": o_id,
-                                "kierunek_oferty": str(o.get("kierunek")),
-                                "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
-                                "wlasciciel_nick": str(o.get("nick")),
-                                "proponujacy_nick": str(st.session_state.user_nick),
-                                "proponujacy_imie": str(st.session_state.user_imie),
-                                "prop_kierunek": str(p_kierunek),
-                                "prop_start": str(p_start),
-                                "prop_koniec": str(p_koniec),
-                                "prop_uwagi": str(p_uwagi.strip())
-                            }
-                            st.session_state.zapasowe_propozycje.append(nowa_prop)
-                            st.success("🎉 Twoja propozycja wymiany została pomyślnie zarejestrowana i zapisana!")
-                            st.rerun()
-                    else:
-                        st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
-                    
-    if licznik_ofert == 0:
-        st.info("Brak dostępnych ofert od innych pracowników.")
+                        st.session_state.zapasowe_propozycje.append({
+                            "id_oferty": o_id,
+                            "kierunek_oferty": str(o.get("kierunek")),
+                            "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
+                            "wlasciciel_nick": str(o.get("nick")),
+                            "proponujacy_nick": st.session_state.user_nick,
+                            "proponujacy_imie": st.session_state.user_imie,
+                            "prop_kierunek": p_kierunek,
+                            "prop_start": str(p_start),
+                            "prop_koniec": str(p_koniec),
+                            "prop_uwagi": p_uwagi.strip()
+                        })
+                        st.success("🎉 Wysłano pomyślnie!")
+                        st.rerun()
 
 # --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
+    with st.form("form_dodaj"):
+        kierunek = st.text_input("Kierunek (np. JFK, CDG):").strip().upper()
+        data_start = st.date_input("Start rotacji:", min_value=datetime.today())
+        data_koniec = st.date_input("Koniec rotacji:", min_value=datetime.today())
+        w_zamian = st.text_area("Za co chcesz się wymienić?")
+        submit = st.form_submit_button("Zapisz ogłoszenie")
+        
+        if submit and kierunek and w_zamian:
+            nowe_id = str(int(datetime.now().timestamp() * 1000))
+            st.session_state.oferty_zapas.append({
+                "id": nowe_id, "nick": st.session_state.user_nick, "imie": st.session_state.user_imie,
+                "kierunek": kierunek, "start": str(data_start), "koniec": str(data_koniec), "w_zamian": w_zamian
+            })
+            st.session_state.nav_index = 2
+            st.rerun()
+
+# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
+elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    moje_loty = [o for o in wszystkie_oferty if str(o.get("nick")).upper() == st.session_state.user_nick.upper()]
     
+    if not moje_loty:
+        st.info("Nie wystawiłeś obecnie żadnych lotów.")
+    else:
+        for o in moje_loty:
+            st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
+            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
+            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
