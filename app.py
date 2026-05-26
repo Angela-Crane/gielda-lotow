@@ -68,7 +68,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukces
+    return sukses
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -89,7 +89,7 @@ def dodaj_rotacje_db(nick, start, koniec, kierunek, w_zamian):
         VALUES (?, ?, ?, ?, ?)
     ''', (nick.upper(), start, koniec, kierunek, w_zamian))
     conn.commit()
-    conn.close()
+.close()
 
 def usun_rotacje_db(id_rotacji, nick):
     conn = sqlite3.connect(DB_FILE)
@@ -110,11 +110,11 @@ if 'zalogowany_imie' not in st.session_state:
 if st.session_state.zalogowany_nick is None:
     st.title("✈️ Giełda Rotacji – Panel Dostępny")
     
-    strefa_akcji = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
+    # Rozbicie na dwie niezależne zakładki w zmiennych
+    zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
-    with strefa_akcji:
+    with zakladka_logowanie:
         st.subheader("Logowanie do systemu")
-        # .upper() wymusza duże litery na poziomie logiki, a .strip() usuwa przypadkowe spacje
         wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
         wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
         
@@ -131,9 +131,8 @@ if st.session_state.zalogowany_nick is None:
             else:
                 st.warning("Uzupełnij oba pola logowania.")
                 
-    with strefa_akcji:
+    with zakladka_rejestracja:
         st.subheader("Rejestracja nowego członka załogi")
-        # Zmienione info w nawiasie / podpowiedzi pomocniczej
         nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Podaj unikalny login, którego używasz w systemie linii lotniczych", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
@@ -159,7 +158,7 @@ if st.session_state.zalogowany_nick is None:
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny - Nick zawsze drukowanymi
+# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.zalogowany_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.zalogowany_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -199,7 +198,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         wyniki = wyniki[(wyniki["start_dt"] <= do_daty) & (wyniki["koniec_dt"] >= od_daty)]
 
     st.divider()
-    st.subheader(f"Dostępne oferty ({len(wyniki)})")
+    st.subheader(f"Dostępne ofertas ({len(wyniki)})")
     
     if wyniki.empty:
         st.info("Brak pasujących rotacji od innych pracowników.")
@@ -207,7 +206,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         for idx, row in wyniki.iterrows():
             naglowek = f"✈️ {row['kierunek'].upper()} | 📅 {row['start_date']} do {row['koniec_date']}"
             with st.expander(naglowek, expanded=True):
-                # Nick wyświetla się z prefiksem @ i drukowanymi literami
                 st.write(f"👤 **Wystawiający:** {row['imie_nazwisko']} (`@{row['pracownik_nick'].upper()}`)")
                 st.warning(f"🔄 **Warunki wymiany:** {row['w_zamian']}")
                 if st.button(f"Zaproponuj wymianę", key=f"trade_{row['id']}", use_container_width=True):
@@ -239,3 +237,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.error("Wypełnij wszystkie pola.")
 
 # --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
+elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
+    
