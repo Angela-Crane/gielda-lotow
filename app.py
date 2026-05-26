@@ -29,10 +29,15 @@ def zapisz_dane(sciezka, dane):
     with open(sciezka, 'w', encoding='utf-8') as f:
         json.dump(dane, f, ensure_ascii=False, indent=4)
 
-# Inicjalizacja baz tekstowych
+# Inicjalizacja baz tekstowych - teraz konto Admina zapisuje się TRWALE przy pierwszym starcie
 konta_db = wczytaj_dane(KONTA_FILE, {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}})
 oferty_db = wczytaj_dane(OFERTY_FILE, [])
 propozycje_db = wczytaj_dane(PROP_FILE, [])
+
+# Upewnienie się, że plik kont na pewno fizycznie istnieje i zawiera Admina
+if "RUTKSA17" not in konta_db:
+    konta_db["RUTKSA17"] = {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}
+    zapisz_dane(KONTA_FILE, konta_db)
 
 # ==================== SYSTEM WBUDOWANEJ SESJI ====================
 if 'user_nick' not in st.session_state:
@@ -116,7 +121,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for o in oferty_db:
+    for o in ofertas_db if 'ofertas_db' in locals() else oferty_db: # Bezpieczne przekierowanie zmiennej
         if o["nick"] != st.session_state.user_nick:
             if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
@@ -143,7 +148,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
-                            # Zapis propozycji powiązany sztywno z unikalnym ID ogłoszenia
                             propozycje_db.append({
                                 "id_oferty": o["id"],
                                 "kierunek_oferty": o["kierunek"],
@@ -180,7 +184,6 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
-                # Generowanie prostego, unikalnego ID numerycznego opartego na czasie
                 nowe_id = int(datetime.now().timestamp() * 1000)
                 
                 oferty_db.append({
@@ -214,7 +217,4 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
                 oferty_db.remove(o)
                 zapisz_dane(OFERTY_FILE, oferty_db)
-                # Czyszczenie powiązanych propozycji po sztywnym ID ogłoszenia
                 propozycje_db = [p for p in propozycje_db if p["id_oferty"] != o["id"]]
-                zapisz_dane(PROP_FILE, propozycje_db)
-                st.success("Ogłoszenie usunięte!")
