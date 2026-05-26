@@ -89,7 +89,7 @@ def dodaj_rotacje_db(nick, start, koniec, kierunek, w_zamian):
         VALUES (?, ?, ?, ?, ?)
     ''', (nick.upper(), start, koniec, kierunek, w_zamian))
     conn.commit()
-.close()
+    conn.close()
 
 def usun_rotacje_db(id_rotacji, nick):
     conn = sqlite3.connect(DB_FILE)
@@ -110,7 +110,6 @@ if 'zalogowany_imie' not in st.session_state:
 if st.session_state.zalogowany_nick is None:
     st.title("✈️ Giełda Rotacji – Panel Dostępny")
     
-    # Rozbicie na dwie niezależne zakładki w zmiennych
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
@@ -198,7 +197,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         wyniki = wyniki[(wyniki["start_dt"] <= do_daty) & (wyniki["koniec_dt"] >= od_daty)]
 
     st.divider()
-    st.subheader(f"Dostępne ofertas ({len(wyniki)})")
+    st.subheader(f"Dostępne oferty ({len(wyniki)})")
     
     if wyniki.empty:
         st.info("Brak pasujących rotacji od innych pracowników.")
@@ -241,3 +240,4 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
     st.header("📋 Twoje aktualne ogłoszenia")
     moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
     
+    if moje.empty:
