@@ -8,7 +8,28 @@ from datetime import datetime
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
 # ==================== KONFIGURACJA ADMINISTRATORA ====================
-NICK_ADMINA = "RUTKSA17"  # <-- WPISZ TUTAJ SWÓJ NICK (wielkimi literami)
+NICK_ADMINA = "RUTKSA17"  # <-- Twój unikalny nick przypisany jako Admin!
+
+# Skrypt JavaScript wymuszający drukowane litery na ekranie
+st.components.v1.html(
+    """
+    <script>
+    const transformToUpper = () => {
+        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+        inputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const start = e.target.selectionStart;
+                const end = e.target.selectionEnd;
+                e.target.value = e.target.value.toUpperCase();
+                e.target.setSelectionRange(start, end);
+            });
+        });
+    };
+    setInterval(transformToUpper, 500);
+    </script>
+    """,
+    height=0,
+)
 
 def szyfruj_haslo(haslo):
     return hashlib.sha256(str.encode(haslo)).hexdigest()
@@ -67,7 +88,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukses
+    return sukces
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -97,14 +118,10 @@ def usun_rotacje_db(id_rotacji, nick):
     conn.commit()
     conn.close()
 
-# --- NOWE FUNKCJE ADMINISTRATORA ---
 def usun_uzytkownika_z_bazy(nick_do_usuniecia):
-    """Usuwa użytkownika oraz wszystkie jego wystawione loty."""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    # 1. Usuń loty użytkownika
     c.execute("DELETE FROM rotacje WHERE pracownik_nick = ?", (nick_do_usuniecia.upper(),))
-    # 2. Usuń profil użytkownika
     c.execute("DELETE FROM uzytkownicy WHERE nick = ?", (nick_do_usuniecia.upper(),))
     conn.commit()
     conn.close()
@@ -170,7 +187,6 @@ if st.sidebar.button("Wyloguj się"):
     st.session_state.zalogowany_imie = None
     st.rerun()
 
-# Dynamiczne generowanie menu w zależności od tego, czy zalogowany to admin
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
 if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
     ZAKLADKI.append("🛠️ Panel Admina")
@@ -184,7 +200,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.subheader("Filtry wyszukiwania")
     col1, col2 = st.columns(2)
     with col1:
-        szukany_kierunek = st.text_input("🛫 Kierunek docelowy (np. JFK):", "").strip()
+        szukany_kierunek = st.text_input("🛫 Kierunek docelowy (np. JFK):", "").strip().upper()
     with col2:
         filtruj_daty = st.checkbox("📅 Filtruj po zakresie dat")
         szukany_zakres = st.date_input("Wybierz przedział czasu:", value=(datetime.today(), datetime.today())) if filtruj_daty else None
@@ -229,12 +245,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
         if submit:
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
-            elif nowy_kierunek and w_zamian:
-                dodaj_rotacje_db(st.session_state.zalogowany_nick, str(data_start), str(data_koniec), nowy_kierunek, w_zamian)
-                st.success("Rotacja została dodana do bazy!")
-                st.rerun()
-            else:
-                st.error("Wypełnij wszystkie pola.")
-
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
-    st.header("📋 Twoje aktualne ogłoszenia")
