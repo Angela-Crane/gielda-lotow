@@ -9,7 +9,6 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# Pliki tekstowe, które będą przechowywać dane na stałe na serwerze
 KONTA_FILE = "dane_konta.json"
 OFERTY_FILE = "dane_oferty.json"
 PROP_FILE = "dane_propozycje.json"
@@ -55,7 +54,7 @@ if st.session_state.user_nick is None:
         if st.button("Wejdź do aplikacji", use_container_width=True):
             if wpisany_nick in konta_db and konta_db[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(konta_db[wpisany_nick]["imie"])  # Czysty tekst imienia
+                st.session_state.user_imie = str(konta_db[wpisany_nick]["imie"])
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -129,24 +128,41 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 st.write("---")
                 
                 klucz_unikalny = f"{o['nick']}_{o['kierunek']}_{o['start']}"
-                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{klucz_unikalny}", placeholder="Wpisz rejs lub daty...")
+                
+                # --- ROZBUDOWANY FORMULARZ PROPOZYCJI W ZAMIAN ---
+                st.markdown("**Co oferujesz w zamian za ten lot?**")
+                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{klucz_unikalny}").strip().upper()
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{klucz_unikalny}")
+                with col2:
+                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{klucz_unikalny}")
+                    
+                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{klucz_unikalny}", placeholder="np. Szukam wolnego, rejs LO123...")
                 
                 if st.button(f"Wyślij propozycję wymiany", key=f"btn_{klucz_unikalny}", use_container_width=True):
-                    if tekst_propozycji.strip():
-                        propozycje_db.append({
-                            "klucz_oferty": klucz_unikalny,
-                            "kierunek_oferty": o["kierunek"],
-                            "daty_oferty": f"{o['start']} do {o['koniec']}",
-                            "wlasciciel_nick": o["nick"],
-                            "proponujacy_nick": st.session_state.user_nick,
-                            "proponujacy_imie": st.session_state.user_imie,
-                            "co_proponuje": tekst_propozycji.strip()
-                        })
-                        zapisz_dane(PROP_FILE, propozycje_db)
-                        st.success("Twój warunek wymiany został pomyślnie wysłany!")
-                        st.rerun()
+                    if p_kierunek:
+                        if p_koniec < p_start:
+                            st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
+                        else:
+                            propozycje_db.append({
+                                "klucz_oferty": klucz_unikalny,
+                                "kierunek_oferty": o["kierunek"],
+                                "daty_oferty": f"{o['start']} do {o['koniec']}",
+                                "wlasciciel_nick": o["nick"],
+                                "proponujacy_nick": st.session_state.user_nick,
+                                "proponujacy_imie": st.session_state.user_imie,
+                                "prop_kierunek": p_kierunek,
+                                "prop_start": str(p_start),
+                                "prop_koniec": str(p_koniec),
+                                "prop_uwagi": p_uwagi.strip()
+                            })
+                            zapisz_dane(PROP_FILE, propozycje_db)
+                            st.success("Twoja propozycja wymiany została pomyślnie wysłana!")
+                            st.rerun()
                     else:
-                        st.error("Wpisz najpierw, co oferujesz w zamian!")
+                        st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
                     
     if licznik_ofert == 0:
         st.info("Brak dostępnych ofert od innych pracowników.")
@@ -174,7 +190,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                zapisz_dane(OFERTY_FILE, oferty_db)
+                zapisz_dane(OFERTY_FILE, ofertas_db)
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -197,27 +213,9 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             if st.button("Usuń ogłoszenie", key=f"del_{klucz_unikalny}", use_container_width=True):
                 oferty_db.remove(o)
                 zapisz_dane(OFERTY_FILE, oferty_db)
-                # Czyszczenie powiązanych propozycji
                 propozycje_db = [p for p in propozycje_db if p["klucz_oferty"] != klucz_unikalny]
                 zapisz_dane(PROP_FILE, propozycje_db)
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.divider()
 
-# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
-elif wybrana_zakladka == "📩 Otrzymane Propozycje":
-    st.header("📩 Propozycje wymiany od załogi")
-    
-    moje_propozycje = [p for p in propozycje_db if p["wlasciciel_nick"] == st.session_state.user_nick]
-    
-    if not moje_propozycje:
-        st.info("Nie otrzymałeś jeszcze żadnych konkretnych propozycji wymiany.")
-    else:
-        for p in moje_propozycje:
-            with st.container():
-                st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
-                st.info(f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) oferuje w zamian:\n\n**{p['co_proponuje']}**")
-                
-                if st.button("Odrzuć tę propozycję", key=f"Reject_{p['klucz_oferty']}_{p['proponujacy_nick']}", use_container_width=True):
-                    propozycje_db.remove(p)
-                    zapisz_dane(PROP_FILE, propozycje_db)
