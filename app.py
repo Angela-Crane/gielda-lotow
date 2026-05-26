@@ -67,7 +67,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukces
+    return sukses
 
 def pobierz_dane():
     conn = sqlite3.connect(DB_FILE)
@@ -114,13 +114,11 @@ if 'zalogowany_imie' not in st.session_state:
 
 if st.session_state.zalogowany_nick is None:
     st.title("✈️ Giełda Rotacji Lotniczych")
-    
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
         wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
         wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
-        
         if st.button("Wejdź do aplikacji", use_container_width=True):
             if wpisany_nick and wpisane_haslo:
                 imie_uzytkownika = weryfikuj_logowanie(wpisany_nick, wpisane_haslo)
@@ -138,7 +136,6 @@ if st.session_state.zalogowany_nick is None:
         nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Możesz wpisać małymi literami - system automatycznie zamieni je na drukowane.", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
-        
         if st.button("Stwórz konto", use_container_width=True):
             if not nowy_nick or not nowe_imie or not nowe_haslo_osobiste:
                 st.error("❌ Wypełnij wszystkie pola formularza rejestracji!")
@@ -171,7 +168,6 @@ if st.session_state.zalogowany_nick == NICK_ADMINA.upper():
     ZAKLADKI.append("🛠️ Panel Admina")
 
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
-
 baza_rotacji = pobierz_dane()
 
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
@@ -238,4 +234,4 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
         st.info("Nie wystawiłeś/aś obecnie żadnych lotów na giełdę.")
     else:
         for idx, row in moje.iterrows():
-            with st.container():
+            st.write(f"✈️ **{row['kierunek'].upper()}** ({row['start_date']} do {row['koniec_date']})")
