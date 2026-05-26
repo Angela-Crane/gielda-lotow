@@ -9,10 +9,14 @@ NICK_ADMINA = "RUTKSA17"
 
 # ==================== CAŁKOWICIE UPROSZCZONA PAMIĘĆ ====================
 if 'konta' not in st.session_state:
-    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "Angela007"}}
+    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}}
 
 if 'oferty' not in st.session_state:
     st.session_state.oferty = []
+
+# Inicjalizacja domyślnego indeksu dla nawigacji (0 to Szukaj, 1 to Wystaw, 2 to Moje ogłoszenia)
+if 'nav_index' not in st.session_state:
+    st.session_state.nav_index = 0
 
 # ==================== SYSTEM LOGOWANIA / REJESTRACJI ====================
 if 'user_nick' not in st.session_state:
@@ -67,12 +71,16 @@ if st.sidebar.button("Wyloguj się"):
     st.session_state.user_imie = None
     st.rerun()
 
-# Lista zakładek (Panel Admina widoczny tylko dla RUTKSA17)
+# Lista zakładek
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
-wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI)
+# Sterowanie nawigacją za pomocą dynamicznego klucza indeksu
+wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI, index=st.session_state.nav_index)
+
+# Aktualizacja indeksu sesji, gdy użytkownik ręcznie klika po menu, aby zapobiec zapętleniu
+st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
 if wybrana_zakladka == "🔎 Szukaj i Filtruj":
@@ -89,7 +97,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                 continue
             licznik_ofert += 1
             with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
-                st.write(f"👤 **Wystawiachy:** {o['imie']} (`@{o['nick']}`)")
+                st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
                 st.warning(f"🔄 **Chce w zamian:** {o['w_zamian']}")
                 if st.button(f"Zaproponuj wymianę", key=f"trade_{o['kierunek']}_{o['start']}"):
                     st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z: {o['imie']} (`@{o['nick']}`).")
@@ -120,7 +128,8 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                st.success("Rotacja została dodana!")
+                # Zmiana indeksu nawigacji na pozycję numer 2, czyli "Moje ogłoszenia"
+                st.session_state.nav_index = 2
                 st.rerun()
             else:
                 st.error("Wypełnij wszystkie pola formularza.")
@@ -153,11 +162,9 @@ elif wybrana_zakladka == "🛠️ Panel Admina":
     if st.button("🚨 Usuń użytkownika na stałe", use_container_width=True):
         if nick_do_skasowania in st.session_state.konta:
             if nick_do_skasowania == NICK_ADMINA:
-                st.error("Nie możesz usunąć własnego konta administratora!")
+                st.error("Nie możesz usunąć własnego konto administratora!")
             else:
-                # Usuń konto
                 del st.session_state.konta[nick_do_skasowania]
-                # Usuń jego loty z giełdy
                 st.session_state.oferty = [o for o in st.session_state.oferty if o["nick"] != nick_do_skasowania]
                 st.success(f"Pomyślnie usunięto użytkownika @{nick_do_skasowania}.")
                 st.rerun()
