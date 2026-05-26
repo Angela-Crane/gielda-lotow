@@ -6,21 +6,20 @@ from datetime import datetime
 # Konfiguracja strony mobilnej
 st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", layout="centered")
 
+# 🔗 !!! TUTAJ WKLEJ TWÓJ LINK DO ARKUSZA GOOGLE !!!
+# Zastąp poniższy tekst swoim pełnym linkiem z przeglądarki:
+SHEET_URL = "https://google.com"
+
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== PANCERNA PAMIĘĆ ZASILANA CHMURĄ ====================
-try:
-    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    if "edit" in SHEET_URL:
-        BASE_URL = SHEET_URL.split("/edit")[0]
-    else:
-        BASE_URL = SHEET_URL
-except:
-    st.error("Brak poprawnego linku do Arkusza Google w panelu Secrets!")
-    st.stop()
+# ==================== BEZPIECZNE PRZETWARZANIE LINKU ====================
+if "edit" in SHEET_URL:
+    BASE_URL = SHEET_URL.split("/edit")[0]
+else:
+    BASE_URL = SHEET_URL
 
-# Pamięć podręczna na wypadek braku internetu, aby aplikacja nigdy się nie wyłączyła
+# Inicjalizacja stabilnej pamięci globalnej w chmurze sesji
 if 'oferty_chmura' not in st.session_state:
     st.session_state.oferty_chmura = [
         {"id": 1001, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
@@ -83,6 +82,7 @@ if st.session_state.user_nick is None:
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
+# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -207,4 +207,3 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
             if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
                 st.session_state.oferty_chmura.remove(o)
                 st.session_state.propozycje_chmura = [p for p in st.session_state.propozycje_chmura if isinstance(p, dict) and p.get("id_oferty") != o.get("id")]
-                st.success("Ogłoszenie usunięte!")
