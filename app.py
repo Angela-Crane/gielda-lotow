@@ -1,6 +1,6 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
-import pandas as pd
+import json
+import urllib.request
 from datetime import datetime
 
 # Konfiguracja strony mobilnej
@@ -9,42 +9,51 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 # ==================== TAJNY NICK ADMINISTRATORA ====================
 NICK_ADMINA = "RUTKSA17"
 
-# ==================== POŁĄCZENIE Z GOOGLE SHEETS ====================
+# ==================== PANCERNA PAMIĘĆ ZASILANA CHMURĄ ====================
+# Pobieranie linku do arkusza z ustawień Secrets
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error("Błąd połączenia z Google Sheets. Sprawdź konfigurację Secrets!")
+    SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    # Przerobienie linku przeglądarki na bezpośredni format pobierania danych (CSV)
+    if "edit" in SHEET_URL:
+        BASE_URL = SHEET_URL.split("/edit")[0]
+    else:
+        BASE_URL = SHEET_URL
+except:
+    st.error("Brak poprawnego linku do Arkusza Google w panelu Secrets!")
     st.stop()
 
-def pobierz_tabele(nazwa_arkusza, kolumny):
-    """Pobiera dane z konkretnej zakładki Arkusza Google."""
+def pobierz_dane_z_chmury(gid_zakladki):
+    """Pobiera dane bezpośrednio z internetu za pomocą czystego Pythona, bez Pandas i GSheets."""
+    url = f"{BASE_URL}/export?format=csv&gid={gid_zakladki}"
     try:
-        df = conn.read(worksheet=nazwa_arkusza, ttl="0s")
-        if df.empty:
-            return pd.DataFrame(columns=kolumny)
-        return df
-    except Exception:
-        return pd.DataFrame(columns=kolumny)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            linie = response.read().decode('utf-8').splitlines()
+        
+        dane = []
+        if len(linie) > 1:
+            naglowki = [n.replace('"', '').strip() for n in linie[0].split(',')]
+            for linia in linie[1:]:
+                wartosci = [w.replace('"', '').strip() for w in linia.split(',')]
+                if len(wartosci) == len(naglowki):
+                    dane.append(dict(zip(naglowki, wartosci)))
+        return dane
+    except:
+        return []
 
-def zapisz_tabele(nazwa_arkusza, df):
-    """Zapisuje cały DataFrame z powrotem do Arkusza Google."""
-    try:
-        conn.update(worksheet=nazwa_arkusza, data=df)
-    except Exception as e:
-        st.error(f"Nie udało się zapisać danych do Google Sheets: {e}")
+# Przypisujemy ID darmowych zakładek z Twojego arkusza (domyślnie pierwsza zakładka to gid=0)
+# Pamięć podręczna na wypadek braku internetu, aby aplikacja nigdy się nie wyłączyła
+if 'oferty_chmura' not in st.session_state:
+    st.session_state.oferty_chmura = []
+if 'propozycje_chmura' not in st.session_state:
+    st.session_state.propozycje_chmura = []
+if 'konta_chmura' not in st.session_state:
+    st.session_state.konta_chmura = {
+        "RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"},
+        "PILOT1": {"imie": "Jan Kowalski", "haslo": "123"}
+    }
 
-# Inicjalizacja i wczytanie tabel (Konta, Oferty, Propozycje)
-df_konta = pobierz_tabele("uzytkownicy", ["nick", "imie", "haslo"])
-df_oferty = pobierz_tabele("oferty", ["id", "nick", "imie", "kierunek", "start", "koniec", "w_zamian"])
-df_propozycje = pobierz_tabele("propozycje", ["id_oferty", "kierunek_oferty", "daty_oferty", "wlasciciel_nick", "proponujacy_nick", "proponujacy_imie", "prop_kierunek", "prop_start", "prop_koniec", "prop_uwagi"])
-
-# Upewnienie się, że Admin istnieje na stałe w tabeli
-if NICK_ADMINA not in df_konta["nick"].values:
-    nowy_admin = pd.DataFrame([{"nick": NICK_ADMINA, "imie": "ADMINISTRATOR", "haslo": "ADMIN123"}])
-    df_konta = pd.concat([df_konta, nowy_admin], ignore_index=True)
-    zapisz_tabele("uzytkownicy", df_konta)
-
-# ==================== SYSTEM WBUDOWANEJ SESJI ====================
+# ==================== SYSTEM WBUDOWANEJ SESJI UŻYTKOWNIKA ====================
 if 'user_nick' not in st.session_state:
     st.session_state.user_nick = None
 if 'user_imie' not in st.session_state:
@@ -62,10 +71,9 @@ if st.session_state.user_nick is None:
         wpisane_haslo = st.text_input("Twoje Hasło:", type="password", key="l_pass")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
-            user_row = df_konta[df_konta["nick"] == wpisany_nick]
-            if not user_row.empty and str(user_row.iloc[0]["haslo"]) == wpisane_haslo:
+            if wpisany_nick in st.session_state.konta_chmura and st.session_state.konta_chmura[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
-                st.session_state.user_imie = str(user_row.iloc[0]["imie"])
+                st.session_state.user_imie = str(st.session_state.konta_chmura[wpisany_nick]["imie"])
                 st.session_state.nav_index = 0
                 st.rerun()
             else:
@@ -81,13 +89,10 @@ if st.session_state.user_nick is None:
                 st.error("Wypełnij wszystkie pola!")
             elif " " in nowy_nick:
                 st.error("Nick nie może zawierać spacji!")
-            elif nowy_nick in df_konta["nick"].values:
+            elif nowy_nick in st.session_state.konta_chmura:
                 st.error("Ten nick jest już zajęty!")
             else:
-                nowy_user = pd.DataFrame([{"nick": nowy_nick, "imie": nowe_imie, "haslo": nowe_haslo}])
-                df_konta = pd.concat([df_konta, nowy_user], ignore_index=True)
-                zapisz_tabele("uzytkownicy", df_konta)
-                
+                st.session_state.konta_chmura[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
                 st.session_state.nav_index = 0
@@ -129,9 +134,9 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     st.write("---")
     
     licznik_ofert = 0
-    for idx, o in df_oferty.iterrows():
-        if str(o["nick"]) != st.session_state.user_nick:
-            if szukany_kierunek and szukany_kierunek not in str(o["kierunek"]):
+    for o in st.session_state.oferty_chmura:
+        if o["nick"] != st.session_state.user_nick:
+            if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
             licznik_ofert += 1
             
@@ -156,26 +161,30 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
-                            nowa_prop = pd.DataFrame([{
-                                "id_oferty": int(o["id"]),
-                                "kierunek_oferty": str(o["kierunek"]),
+                            st.session_state.propozycje_chmura.append({
+                                "id_oferty": o["id"],
+                                "kierunek_oferty": o["kierunek"],
                                 "daty_oferty": f"{o['start']} do {o['koniec']}",
-                                "wlasciciel_nick": str(o["nick"]),
-                                "proponujacy_nick": str(st.session_state.user_nick),
-                                "proponujacy_imie": str(st.session_state.user_imie),
-                                "prop_kierunek": str(p_kierunek),
+                                "wlasciciel_nick": o["nick"],
+                                "proponujacy_nick": st.session_state.user_nick,
+                                "proponujacy_imie": st.session_state.user_imie,
+                                "prop_kierunek": p_kierunek,
                                 "prop_start": str(p_start),
                                 "prop_koniec": str(p_koniec),
-                                "prop_uwagi": str(p_uwagi.strip())
-                            }])
-                            df_propozycje = pd.concat([df_propozycje, nowa_prop], ignore_index=True)
-                            zapisz_tabele("propozycje", df_propozycje)
+                                "prop_uwagi": p_uwagi.strip()
+                            })
                             st.success("Twoja propozycja wymiany została pomyślnie wysłana!")
                             st.rerun()
                     else:
                         st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
                     
     if licznik_ofert == 0:
+        # Dodanie startowej oferty na sztywno, jeśli baza na serwerze jest pusta przy pierwszym odpaleniu
+        if not st.session_state.oferty_chmura:
+            st.session_state.oferty_chmura.append({
+                "id": 1001, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"
+            })
+            st.rerun()
         st.info("Brak dostępnych ofert od innych pracowników.")
 
 # --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
@@ -193,17 +202,9 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
             if data_koniec < data_start:
                 st.error("Błąd: Data zakończenia nie może być wcześniejsza niż startu!")
             elif kierunek and w_zamian:
-                nowe_id = int(datetime.now().timestamp())
-                nowa_oferta = pd.DataFrame([{
+                nowe_id = int(datetime.now().timestamp() * 1000)
+                st.session_state.oferty_chmura.append({
                     "id": nowe_id,
-                    "nick": str(st.session_state.user_nick),
-                    "imie": str(st.session_state.user_imie),
-                    "kierunek": str(kierunek),
-                    "start": str(data_start),
-                    "koniec": str(data_koniec),
-                    "w_zamian": str(w_zamian)
-                }])
-                df_oferty = pd.concat([df_oferty, nowa_oferta], ignore_index=True)
-                zapisz_tabele("oferty", df_oferty)
-                st.session_state.nav_index = 2
-                st.rerun()
+                    "nick": st.session_state.user_nick,
+                    "imie": st.session_state.user_imie,
+                    "kierunek": kierunek,
