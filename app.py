@@ -204,10 +204,10 @@ elif view == "📩 Otrzymane Propozycje":
     if not moje_p:
         st.info("Nie otrzymałeś jeszcze żadnych propozycji wymiany.")
     else:
-        # Dodanie indeksowania pętli naprawiające linię 214
         for idx, p in enumerate(moje_p):
             with st.container():
                 st.write(f"📌 Dotyczy Twojego lotu: **{p['kierunek_oferty']}** ({p['daty_oferty']})")
                 st.info(
                     f"👤 **{p['proponujacy_imie']}** (`@{p['proponujacy_nick']}`) proponuje lot:\n\n"
                     f"🛫 **Kierunek:** {p['prop_kierunek']}\n"
+                    f"📅 **Termin:** {p['prop_start']} do {p['prop_koniec']}\n"
