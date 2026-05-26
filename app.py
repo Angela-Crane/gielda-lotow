@@ -108,14 +108,21 @@ if 'zalogowany_imie' not in st.session_state:
     st.session_state.zalogowany_imie = None
 
 if st.session_state.zalogowany_nick is None:
-    st.title("✈️ Giełda Rotacji – Panel Dostępny")
+    # Nowy, ładniejszy wygląd panelu wejściowego
+    st.markdown("""
+        <div style="background-color:#1E3A8A;padding:20px;border-radius:10px;text-align:center;margin-bottom:25px">
+            <h1 style="color:white;margin:0;font-size:28px;">✈️ Giełda Rotacji Lotniczych</h1>
+            <p style="color:#93C5FD;margin:5px 0 0 0;font-size:14px;">Panel bezpiecznej wymiany grafików dla załóg</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     zakladka_logowanie, zakladka_rejestracja = st.tabs(["🔒 Zaloguj się", "📝 Utwórz nowe konto"])
     
     with zakladka_logowanie:
-        st.subheader("Logowanie do systemu")
+        st.write("")
         wpisany_nick = st.text_input("Twój Nick:", key="login_nick").strip().upper()
         wpisane_haslo = st.text_input("Twoje Hasło osobiste:", type="password", key="login_pass")
+        st.write("")
         
         if st.button("Wejdź do aplikacji", use_container_width=True):
             if wpisany_nick and wpisane_haslo:
@@ -131,10 +138,11 @@ if st.session_state.zalogowany_nick is None:
                 st.warning("Uzupełnij oba pola logowania.")
                 
     with zakladka_rejestracja:
-        st.subheader("Rejestracja nowego członka załogi")
+        st.write("")
         nowy_nick = st.text_input("Wpisz swój oficjalny Nick:", help="Podaj unikalny login, którego używasz w systemie linii lotniczych", key="reg_nick").strip().upper()
         nowe_imie = st.text_input("Twoje Imię i Nazwisko:")
         nowe_haslo_osobiste = st.text_input("Wymyśl swoje prywatne Hasło osobiste:", type="password", key="reg_pass")
+        st.write("")
         
         if st.button("Stwórz konto", use_container_width=True):
             if not nowy_nick or not nowe_imie or not nowe_haslo_osobiste:
@@ -233,11 +241,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.success("Rotacja została dodana do bazy!")
                 st.rerun()
             else:
-                st.error("Wypełnij wszystkie pola.")
-
-# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
-    st.header("📋 Twoje aktualne ogłoszenia")
-    moje = baza_rotacji[baza_rotacji["pracownik_nick"] == st.session_state.zalogowany_nick]
-    
-    if moje.empty:
