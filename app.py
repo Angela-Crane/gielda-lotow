@@ -10,10 +10,8 @@ st.set_page_config(page_title="Wymiana Rotacji Lotniczych", page_icon="✈️", 
 NICK_ADMINA = "RUTKSA17"
 
 # ==================== PANCERNA PAMIĘĆ ZASILANA CHMURĄ ====================
-# Pobieranie linku do arkusza z ustawień Secrets
 try:
     SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    # Przerobienie linku przeglądarki na bezpośredni format pobierania danych (CSV)
     if "edit" in SHEET_URL:
         BASE_URL = SHEET_URL.split("/edit")[0]
     else:
@@ -22,29 +20,11 @@ except:
     st.error("Brak poprawnego linku do Arkusza Google w panelu Secrets!")
     st.stop()
 
-def pobierz_dane_z_chmury(gid_zakladki):
-    """Pobiera dane bezpośrednio z internetu za pomocą czystego Pythona, bez Pandas i GSheets."""
-    url = f"{BASE_URL}/export?format=csv&gid={gid_zakladki}"
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            linie = response.read().decode('utf-8').splitlines()
-        
-        dane = []
-        if len(linie) > 1:
-            naglowki = [n.replace('"', '').strip() for n in linie[0].split(',')]
-            for linia in linie[1:]:
-                wartosci = [w.replace('"', '').strip() for w in linia.split(',')]
-                if len(wartosci) == len(naglowki):
-                    dane.append(dict(zip(naglowki, wartosci)))
-        return dane
-    except:
-        return []
-
-# Przypisujemy ID darmowych zakładek z Twojego arkusza (domyślnie pierwsza zakładka to gid=0)
 # Pamięć podręczna na wypadek braku internetu, aby aplikacja nigdy się nie wyłączyła
 if 'oferty_chmura' not in st.session_state:
-    st.session_state.oferty_chmura = []
+    st.session_state.oferty_chmura = [
+        {"id": 1001, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"}
+    ]
 if 'propozycje_chmura' not in st.session_state:
     st.session_state.propozycje_chmura = []
 if 'konta_chmura' not in st.session_state:
@@ -103,7 +83,6 @@ if st.session_state.user_nick is None:
 # ==================== INTERFEJS PO ZALOGOWANIU ====================
 st.title("✈️ Giełda Rotacji Lotniczych")
 
-# Panel boczny
 st.sidebar.markdown(f"👤 Zalogowany: **{st.session_state.user_imie}**")
 st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
@@ -135,37 +114,38 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
     
     licznik_ofert = 0
     for o in st.session_state.oferty_chmura:
-        if o["nick"] != st.session_state.user_nick:
-            if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
+        if isinstance(o, dict) and o.get("nick") != st.session_state.user_nick:
+            if szukany_kierunek and szukany_kierunek not in o.get("kierunek", ""):
                 continue
             licznik_ofert += 1
             
-            with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
-                st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
-                st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
+            o_id = o.get("id", 101)
+            with st.expander(f"✈️ {o.get('kierunek')} | 📅 {o.get('start')} do {o.get('koniec')}", expanded=True):
+                st.write(f"👤 **Wystawca:** {o.get('imie')} (`@{o.get('nick')}`)")
+                st.write(f"🔄 **Chce w zamian:** {o.get('w_zamian')}")
                 st.write("---")
                 
                 st.markdown("**Co oferujesz w zamian za ten lot?**")
-                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{o['id']}").strip().upper()
+                p_kierunek = st.text_input("Kierunek Twojego lotu (np. CDG):", key=f"p_kier_{o_id}").strip().upper()
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{o['id']}")
+                    p_start = st.date_input("Start Twojego lotu:", min_value=datetime.today(), key=f"p_start_{o_id}")
                 with col2:
-                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{o['id']}")
+                    p_koniec = st.date_input("Koniec Twojego lotu:", min_value=datetime.today(), key=f"p_koniec_{o_id}")
                     
-                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o['id']}", placeholder="np. Szukam wolnego...")
+                p_uwagi = st.text_input("Dodatkowe uwagi (opcjonalnie):", key=f"p_uwagi_{o_id}", placeholder="np. Szukam wolnego...")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
                     if p_kierunek:
                         if p_koniec < p_start:
                             st.error("Błąd: Data zakończenia Twojego lotu nie może być wcześniejsza niż startu!")
                         else:
                             st.session_state.propozycje_chmura.append({
-                                "id_oferty": o["id"],
-                                "kierunek_oferty": o["kierunek"],
-                                "daty_oferty": f"{o['start']} do {o['koniec']}",
-                                "wlasciciel_nick": o["nick"],
+                                "id_oferty": o_id,
+                                "kierunek_oferty": o.get("kierunek"),
+                                "daty_oferty": f"{o.get('start')} do {o.get('koniec')}",
+                                "wlasciciel_nick": o.get("nick"),
                                 "proponujacy_nick": st.session_state.user_nick,
                                 "proponujacy_imie": st.session_state.user_imie,
                                 "prop_kierunek": p_kierunek,
@@ -179,12 +159,6 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         st.error("Wpisz kierunek lotu, który oferujesz w zamian!")
                     
     if licznik_ofert == 0:
-        # Dodanie startowej oferty na sztywno, jeśli baza na serwerze jest pusta przy pierwszym odpaleniu
-        if not st.session_state.oferty_chmura:
-            st.session_state.oferty_chmura.append({
-                "id": 1001, "nick": "PILOT1", "imie": "Jan Kowalski", "kierunek": "JFK", "start": "2026-06-01", "koniec": "2026-06-05", "w_zamian": "Szukam wolnego"
-            })
-            st.rerun()
         st.info("Brak dostępnych ofert od innych pracowników.")
 
 # --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
@@ -208,3 +182,29 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "nick": st.session_state.user_nick,
                     "imie": st.session_state.user_imie,
                     "kierunek": kierunek,
+                    "start": str(data_start),
+                    "koniec": str(data_koniec),
+                    "w_zamian": w_zamian
+                })
+                st.session_state.nav_index = 2
+                st.rerun()
+            else:
+                st.error("Wypełnij wszystkie pola formularza.")
+
+# --- ZAKŁADKA 3: MOJE OGŁOSZENIA ---
+elif wybrana_zakladka == "📋 Moje ogłoszenia":
+    st.header("📋 Twoje aktualne ogłoszenia")
+    
+    moje_loty = [o for o in st.session_state.oferty_chmura if isinstance(o, dict) and o.get("nick") == st.session_state.user_nick]
+    
+    if not moje_loty:
+        st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
+    else:
+        for o in moje_loty:
+            st.write(f"✈️ **{o.get('kierunek')}** ({o.get('start')} do {o.get('koniec')})")
+            st.write(f"🔄 Oczekiwania: {o.get('w_zamian')}")
+            
+            if st.button("Usuń ogłoszenie", key=f"del_{o.get('id')}", use_container_width=True):
+                st.session_state.oferty_chmura.remove(o)
+                st.session_state.propozycje_chmura = [p for p in st.session_state.propozycje_chmura if isinstance(p, dict) and p.get("id_oferty") != o.get("id")]
+                st.success("Ogłoszenie usunięte!")
