@@ -67,7 +67,7 @@ def zarejestruj_uzytkownika(nick, imie_nazwisko, haslo):
     except sqlite3.IntegrityError:
         sukces = False
     conn.close()
-    return sukces
+    return sukses
 
 def pobierz_wszystkie_rotacje():
     conn = sqlite3.connect(DB_FILE)
@@ -181,10 +181,11 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
 
     wyniki = pobierz_wszystkie_rotacje()
     if not wyniki.empty:
-        wyniki = wyniki[wyniki["pracownik_nick"].str.upper() != st.session_state.zalogowany_nick.upper()]
+        # Bezpieczne odfiltrowanie własnych lotów bez używania metod tekstowych bezpośrednio na obiektach None
+        wyniki = wyniki[wyniki["pracownik_nick"].fillna("").str.upper() != st.session_state.zalogowany_nick.upper()]
     
     if szukany_kierunek and not wyniki.empty:
-        wyniki = wyniki[wyniki["kierunek"].str.contains(szukany_kierunek, case=False, na=False)]
+        wyniki = wyniki[wyniki["kierunek"].fillna("").str.contains(szukany_kierunek, case=False, na=False)]
         
     if filtruj_daty and szukany_zakres and len(szukany_zakres) == 2 and not wyniki.empty:
         od_daty = pd.to_datetime(szukany_zakres)
@@ -199,12 +200,15 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
         st.info("Brak pasujących rotacji od innych pracowników.")
     else:
         for idx, row in wyniki.iterrows():
-            naglowek = f"✈️ {row['kierunek'].upper()} | 📅 {row['start_date']} do {row['koniec_date']}"
+            kierunek_wyswietl = str(row['kierunek']).upper() if row['kierunek'] else "BRAK"
+            naglowek = f"✈️ {kierunek_wyswietl} | 📅 {row['start_date']} do {row['koniec_date']}"
             with st.expander(naglowek, expanded=True):
-                st.write(f"👤 **Wystawiający:** {row['imie_nazwisko']} (`@{row['pracownik_nick'].upper()}`)")
+                wystawiajacy_nazwa = row['imie_nazwisko'] if row['imie_nazwisko'] else "Nieznany"
+                wystawiajacy_nick = str(row['pracownik_nick']).upper() if row['pracownik_nick'] else "BRAK"
+                st.write(f"👤 **Wystawiający:** {wystawiajacy_nazwa} (`@{wystawiajacy_nick}`)")
                 st.warning(f"🔄 **Warunki wymiany:** {row['w_zamian']}")
                 if st.button(f"Zaproponuj wymianę", key=f"trade_{row['id']}", use_container_width=True):
-                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {row['imie_nazwisko']} (`@{row['pracownik_nick'].upper()}`).")
+                    st.success(f"Zgłoszono chęć wymiany! Skontaktuj się z użytkownikiem: {wystawiajacy_nazwa} (`@{wystawiajacy_nick}`).")
 
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
     st.header("📤 Dodaj nową rotację")
@@ -225,11 +229,3 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                 st.success("Rotacja została dodana do bazy!")
                 st.rerun()
             else:
-                st.error("Wypełnij wszystkie pola.")
-
-elif wybrana_zakladka == "📋 Moje ogłoszenia":
-    st.header("📋 Twoje aktualne ogłoszenia")
-    wszystkie = pobierz_wszystkie_rotacje()
-    moje = wszystkie[wszystkie["pracownik_nick"].str.upper() == st.session_state.zalogowany_nick.upper()] if not wszystkie.empty else pd.DataFrame()
-    
-    if moje.empty:
