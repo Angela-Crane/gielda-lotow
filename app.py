@@ -105,18 +105,21 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
             if szukany_kierunek and szukany_kierunek not in o["kierunek"]:
                 continue
             licznik_ofert += 1
+            
+            # Bezpieczne pobranie ID (zabezpieczenie linii 213)
+            o_id = o.get("id", f"{o['kierunek']}_{o['start']}")
+            
             with st.expander(f"✈️ {o['kierunek']} | 📅 {o['start']} do {o['koniec']}", expanded=True):
                 st.write(f"👤 **Wystawca:** {o['imie']} (`@{o['nick']}`)")
                 st.write(f"🔄 **Chce w zamian:** {o['w_zamian']}")
                 
-                # Nowy formularz składania propozycji wewnątrz rozwijanej karty
                 st.write("---")
-                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o['id']}", placeholder="Wpisz np. numer swojego lotu i datę lub 'Wolne'...")
+                tekst_propozycji = st.text_input("Co proponujesz w zamian za ten lot?", key=f"input_{o_id}", placeholder="Wpisz np. numer swojego lotu i datę lub 'Wolne'...")
                 
-                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o['id']}", use_container_width=True):
+                if st.button(f"Wyślij propozycję wymiany", key=f"btn_{o_id}", use_container_width=True):
                     if tekst_propozycji.strip():
                         st.session_state.propozycje.append({
-                            "id_oferty": o["id"],
+                            "id_oferty": o_id,
                             "kierunek_oferty": o["kierunek"],
                             "daty_oferty": f"{o['start']} do {o['koniec']}",
                             "wlasciciel_nick": o["nick"],
@@ -129,7 +132,7 @@ if wybrana_zakladka == "🔎 Szukaj i Filtruj":
                         st.error("Wpisz najpierw, co oferujesz w zamian!")
                     
     if licznik_ofert == 0:
-        st.info("Brak dostępnych ofert od innych pracowników.")
+        st.info("Brak darmowych ofert od innych pracowników.")
 
 # --- ZAKŁADKA 2: WYSTAW ROTACJĘ ---
 elif wybrana_zakladka == "📤 Wystaw swoją rotację":
@@ -156,7 +159,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "w_zamian": w_zamian
                 })
                 st.session_state.licznik_id_ofert += 1
-                st.session_state.nav_index = 2  # Przekierowanie do Moje Ogłoszenia
+                st.session_state.nav_index = 2
                 st.rerun()
             else:
                 st.error("Wypełnij wszystkie pola formularza.")
@@ -171,18 +174,17 @@ elif wybrana_zakladka == "📋 Moje ogłoszenia":
         st.info("Nie wystawiłeś obecnie żadnych lotów na giełdę.")
     else:
         for o in moje_loty:
+            o_id = o.get("id", f"{o['kierunek']}_{o['start']}")
             st.write(f"✈️ **{o['kierunek']}** ({o['start']} do {o['koniec']})")
             st.write(f"🔄 Oczekiwania: {o['w_zamian']}")
-            if st.button("Usuń ogłoszenie", key=f"del_{o['id']}", use_container_width=True):
-                # Usuń ogłoszenie
+            if st.button("Usuń ogłoszenie", key=f"del_{o_id}", use_container_width=True):
                 st.session_state.oferty.remove(o)
-                # Usuń również powiązane z nim propozycje od innych
-                st.session_state.propozycje = [p for p in st.session_state.propozycje if p["id_oferty"] != o["id"]]
+                st.session_state.propozycje = [p for p in st.session_state.propozycje if p["id_oferty"] != o_id]
                 st.success("Ogłoszenie usunięte!")
                 st.rerun()
             st.write("---")
 
-# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE (NOWOŚĆ) ---
+# --- ZAKŁADKA 4: OTRZYMANE PROPOZYCJE ---
 elif wybrana_zakladka == "📩 Otrzymane Propozycje":
     st.header("📩 Propozycje wymiany od załogi")
     st.write("Tutaj trafiają oferty osób, które kliknęły 'Zaproponuj wymianę' przy Twoich lotach.")
@@ -211,3 +213,4 @@ elif wybrana_zakladka == "🛠️ Panel Admina":
     nick_do_skasowania = st.text_input("Wpisz NICK do usunięcia:").strip().upper()
     
     if st.button("🚨 Usuń użytkownika na stałe", use_container_width=True):
+        if nick_do_skasowania in st.session_state.konta:
