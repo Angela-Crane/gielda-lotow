@@ -14,7 +14,7 @@ if 'konta' not in st.session_state:
 if 'oferty' not in st.session_state:
     st.session_state.oferty = []
 
-# Inicjalizacja domyślnego indeksu dla nawigacji (0 to Szukaj, 1 to Wystaw, 2 to Moje ogłoszenia)
+# Inicjalizacja domyślnego indeksu dla nawigacji
 if 'nav_index' not in st.session_state:
     st.session_state.nav_index = 0
 
@@ -36,6 +36,7 @@ if st.session_state.user_nick is None:
             if wpisany_nick in st.session_state.konta and st.session_state.konta[wpisany_nick]["haslo"] == wpisane_haslo:
                 st.session_state.user_nick = wpisany_nick
                 st.session_state.user_imie = st.session_state.konta[wpisany_nick]["imie"]
+                st.session_state.nav_index = 0  # BEZPIECZNY RESET NAWIGACJI
                 st.rerun()
             else:
                 st.error("Nieprawidłowy nick lub hasło!")
@@ -56,6 +57,7 @@ if st.session_state.user_nick is None:
                 st.session_state.konta[nowy_nick] = {"imie": nowe_imie, "haslo": nowe_haslo}
                 st.session_state.user_nick = nowy_nick
                 st.session_state.user_imie = nowe_imie
+                st.session_state.nav_index = 0  # BEZPIECZNY RESET NAWIGACJI
                 st.success("Konto utworzone!")
                 st.rerun()
     st.stop()
@@ -69,17 +71,22 @@ st.sidebar.markdown(f"🔑 Twój Nick: `{st.session_state.user_nick}`")
 if st.sidebar.button("Wyloguj się"):
     st.session_state.user_nick = None
     st.session_state.user_imie = None
+    st.session_state.nav_index = 0
     st.rerun()
 
-# Lista zakładek
+# Dynamiczna lista zakładek
 ZAKLADKI = ["🔎 Szukaj i Filtruj", "📤 Wystaw swoją rotację", "📋 Moje ogłoszenia"]
 if st.session_state.user_nick == NICK_ADMINA:
     ZAKLADKI.append("🛠️ Panel Admina")
 
-# Sterowanie nawigacją za pomocą dynamicznego klucza indeksu
+# Zabezpieczenie przed wyjściem indeksu poza zakres opcji zwykłego użytkownika
+if st.session_state.nav_index >= len(ZAKLADKI):
+    st.session_state.nav_index = 0
+
+# Wyświetlanie menu bocznego
 wybrana_zakladka = st.sidebar.radio("Nawigacja", ZAKLADKI, index=st.session_state.nav_index)
 
-# Aktualizacja indeksu sesji, gdy użytkownik ręcznie klika po menu, aby zapobiec zapętleniu
+# Zapis aktualnej pozycji użytkownika w pamięci
 st.session_state.nav_index = ZAKLADKI.index(wybrana_zakladka)
 
 # --- ZAKŁADKA 1: SZUKAJ I FILTRUJ ---
@@ -128,7 +135,7 @@ elif wybrana_zakladka == "📤 Wystaw swoją rotację":
                     "koniec": str(data_koniec),
                     "w_zamian": w_zamian
                 })
-                # Zmiana indeksu nawigacji na pozycję numer 2, czyli "Moje ogłoszenia"
+                # Automatyczne przekierowanie do zakładki "Moje ogłoszenia" (pozycja nr 2)
                 st.session_state.nav_index = 2
                 st.rerun()
             else:
@@ -162,7 +169,7 @@ elif wybrana_zakladka == "🛠️ Panel Admina":
     if st.button("🚨 Usuń użytkownika na stałe", use_container_width=True):
         if nick_do_skasowania in st.session_state.konta:
             if nick_do_skasowania == NICK_ADMINA:
-                st.error("Nie możesz usunąć własnego konto administratora!")
+                st.error("Nie możesz usunąć własnego konta administratora!")
             else:
                 del st.session_state.konta[nick_do_skasowania]
                 st.session_state.oferty = [o for o in st.session_state.oferty if o["nick"] != nick_do_skasowania]
