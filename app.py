@@ -9,7 +9,7 @@ NICK_ADMINA = "RUTKSA17"
 
 # ==================== CAŁKOWICIE UPROSZCZONA PAMIĘĆ ====================
 if 'konta' not in st.session_state:
-    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "ADMIN123"}}
+    st.session_state.konta = {"RUTKSA17": {"imie": "ADMINISTRATOR", "haslo": "Angela007"}}
 
 if 'oferty' not in st.session_state:
     st.session_state.oferty = []
